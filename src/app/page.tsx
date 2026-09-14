@@ -1,48 +1,20 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
+import Image from "next/image";
 
 type View = "choice" | "create" | "join";
 
-function ScribbleMark() {
+function LogoMark() {
   return (
-    <div className="relative flex h-20 items-center justify-center">
-      <svg
-        viewBox="0 0 200 110"
-        className="absolute h-20 w-[210px]"
-        aria-hidden
-      >
-        <g fill="none" stroke="var(--accent)" strokeLinecap="round">
-          <ellipse
-            cx="100"
-            cy="55"
-            rx="88"
-            ry="30"
-            transform="rotate(11 100 55)"
-            strokeWidth="3"
-          />
-          <ellipse
-            cx="96"
-            cy="53"
-            rx="82"
-            ry="33"
-            transform="rotate(-16 96 53)"
-            strokeWidth="2.5"
-          />
-          <ellipse
-            cx="103"
-            cy="57"
-            rx="70"
-            ry="25"
-            transform="rotate(48 103 57)"
-            strokeWidth="3"
-          />
-        </g>
-      </svg>
-      <h1 className="relative font-display text-[2.6rem] font-extrabold leading-none tracking-tight text-text">
-        Foyer
-      </h1>
-    </div>
+    <Image
+      src="/logo.png"
+      alt="Home"
+      width={200}
+      height={200}
+      priority
+      className="h-28 w-28"
+    />
   );
 }
 
@@ -101,7 +73,7 @@ export default function Home() {
     >
       <div className="w-full max-w-[380px]">
         <div className="mb-8 flex flex-col items-center text-center">
-          <ScribbleMark />
+          <LogoMark />
           <p className="mt-1 text-[15px] text-text-muted">
             L&apos;espace commun de votre maison
           </p>
