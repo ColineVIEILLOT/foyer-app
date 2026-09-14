@@ -2,8 +2,9 @@
 
 import { useState, type FormEvent } from "react";
 import Image from "next/image";
+import { createHousehold, joinHousehold } from "./actions";
 
-type View = "choice" | "create" | "join";
+type View = "choice" | "create" | "join" | "success";
 
 function LogoMark() {
   return (
@@ -28,12 +29,10 @@ function FieldLabel({ children, htmlFor }: { children: string; htmlFor: string }
 
 function TextField({
   id,
-  type = "text",
   placeholder,
   autoComplete,
 }: {
   id: string;
-  type?: string;
   placeholder?: string;
   autoComplete?: string;
 }) {
@@ -41,7 +40,7 @@ function TextField({
     <input
       id={id}
       name={id}
-      type={type}
+      type="text"
       placeholder={placeholder}
       autoComplete={autoComplete}
       required
@@ -50,17 +49,68 @@ function TextField({
   );
 }
 
+function CodeField({
+  id,
+  autoComplete,
+}: {
+  id: string;
+  autoComplete?: string;
+}) {
+  return (
+    <input
+      id={id}
+      name={id}
+      type="text"
+      inputMode="numeric"
+      pattern="\d{6}"
+      maxLength={6}
+      placeholder="000000"
+      autoComplete={autoComplete}
+      required
+      className="w-full rounded-xl border border-border bg-surface-2 px-4 py-3 text-center text-[20px] tracking-[0.5em] text-text placeholder:text-text-muted/40 outline-none transition-colors focus:border-accent"
+    />
+  );
+}
+
+function ErrorText({ message }: { message: string | null }) {
+  if (!message) return null;
+  return <p className="text-sm text-danger">{message}</p>;
+}
+
 export default function Home() {
   const [view, setView] = useState<View>("choice");
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  function handleCreate(e: FormEvent<HTMLFormElement>) {
+  async function handleCreate(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    // La création du foyer sera branchée à la base de données à l'étape suivante.
+    setError(null);
+    setPending(true);
+    const result = await createHousehold(new FormData(e.currentTarget));
+    setPending(false);
+    if (result.ok) {
+      setView("success");
+    } else {
+      setError(result.error);
+    }
   }
 
-  function handleJoin(e: FormEvent<HTMLFormElement>) {
+  async function handleJoin(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    // La connexion au foyer sera branchée à la base de données à l'étape suivante.
+    setError(null);
+    setPending(true);
+    const result = await joinHousehold(new FormData(e.currentTarget));
+    setPending(false);
+    if (result.ok) {
+      setView("success");
+    } else {
+      setError(result.error);
+    }
+  }
+
+  function backToChoice() {
+    setError(null);
+    setView("choice");
   }
 
   return (
@@ -101,7 +151,7 @@ export default function Home() {
             <form onSubmit={handleCreate} className="flex flex-col gap-4">
               <button
                 type="button"
-                onClick={() => setView("choice")}
+                onClick={backToChoice}
                 className="mb-1 self-start text-sm text-text-muted transition-colors hover:text-text"
               >
                 ← Retour
@@ -112,20 +162,20 @@ export default function Home() {
                 <TextField id="create-name" placeholder="Maison Vieillot" />
               </div>
               <div className="flex flex-col gap-1.5">
-                <FieldLabel htmlFor="create-password">Mot de passe</FieldLabel>
-                <TextField id="create-password" type="password" autoComplete="new-password" />
+                <FieldLabel htmlFor="create-code">Code à 6 chiffres</FieldLabel>
+                <CodeField id="create-code" autoComplete="off" />
               </div>
               <div className="flex flex-col gap-1.5">
-                <FieldLabel htmlFor="create-password-confirm">
-                  Confirmer le mot de passe
-                </FieldLabel>
-                <TextField id="create-password-confirm" type="password" autoComplete="new-password" />
+                <FieldLabel htmlFor="create-code-confirm">Confirmer le code</FieldLabel>
+                <CodeField id="create-code-confirm" autoComplete="off" />
               </div>
+              <ErrorText message={error} />
               <button
                 type="submit"
-                className="mt-2 w-full rounded-xl bg-accent px-5 py-3.5 text-[15px] font-semibold text-surface transition-colors hover:bg-accent-soft"
+                disabled={pending}
+                className="mt-2 w-full rounded-xl bg-accent px-5 py-3.5 text-[15px] font-semibold text-surface transition-colors hover:bg-accent-soft disabled:opacity-60"
               >
-                Créer le foyer
+                {pending ? "Création…" : "Créer le foyer"}
               </button>
             </form>
           )}
@@ -134,7 +184,7 @@ export default function Home() {
             <form onSubmit={handleJoin} className="flex flex-col gap-4">
               <button
                 type="button"
-                onClick={() => setView("choice")}
+                onClick={backToChoice}
                 className="mb-1 self-start text-sm text-text-muted transition-colors hover:text-text"
               >
                 ← Retour
@@ -145,16 +195,30 @@ export default function Home() {
                 <TextField id="join-name" placeholder="Maison Vieillot" />
               </div>
               <div className="flex flex-col gap-1.5">
-                <FieldLabel htmlFor="join-password">Mot de passe</FieldLabel>
-                <TextField id="join-password" type="password" autoComplete="current-password" />
+                <FieldLabel htmlFor="join-code">Code à 6 chiffres</FieldLabel>
+                <CodeField id="join-code" autoComplete="off" />
               </div>
+              <ErrorText message={error} />
               <button
                 type="submit"
-                className="mt-2 w-full rounded-xl bg-accent px-5 py-3.5 text-[15px] font-semibold text-surface transition-colors hover:bg-accent-soft"
+                disabled={pending}
+                className="mt-2 w-full rounded-xl bg-accent px-5 py-3.5 text-[15px] font-semibold text-surface transition-colors hover:bg-accent-soft disabled:opacity-60"
               >
-                Entrer
+                {pending ? "Vérification…" : "Entrer"}
               </button>
             </form>
+          )}
+
+          {view === "success" && (
+            <div className="flex flex-col items-center gap-2 py-4 text-center">
+              <h2 className="font-display text-xl font-bold text-text">
+                C&apos;est fait !
+              </h2>
+              <p className="text-[15px] text-text-muted">
+                Le foyer est enregistré. La suite (profils, accueil commun)
+                arrive à la prochaine étape.
+              </p>
+            </div>
           )}
         </div>
       </div>
