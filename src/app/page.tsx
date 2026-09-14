@@ -55,6 +55,32 @@ const TODAY_LABEL = new Intl.DateTimeFormat("fr-FR", {
   month: "long",
 }).format(new Date());
 
+const WEATHER_CACHE_KEY = "foyer-weather-cache";
+const WEATHER_CACHE_MAX_AGE_MS = 45 * 60 * 1000; // 45 minutes
+
+type WeatherCache = { weather: Weather; fetchedAt: number };
+
+function readWeatherCache(): Weather | null {
+  try {
+    const raw = window.localStorage.getItem(WEATHER_CACHE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as WeatherCache;
+    if (Date.now() - parsed.fetchedAt > WEATHER_CACHE_MAX_AGE_MS) return null;
+    return parsed.weather;
+  } catch {
+    return null;
+  }
+}
+
+function writeWeatherCache(weather: Weather) {
+  try {
+    const entry: WeatherCache = { weather, fetchedAt: Date.now() };
+    window.localStorage.setItem(WEATHER_CACHE_KEY, JSON.stringify(entry));
+  } catch {
+    // Stockage indisponible (navigation privée, etc.) — tant pis, on refera la demande.
+  }
+}
+
 function getGreeting() {
   const hour = new Date().getHours();
   if (hour < 12) return "Bonjour";
@@ -132,7 +158,7 @@ function IconCalendar() {
 }
 
 const DASHBOARD_CARDS = [
-  { title: "Courses", subtitle: "Bientôt disponible", color: "sage", Icon: IconBasket },
+  { title: "Courses", subtitle: "Bientôt disponible", color: "pink", Icon: IconBasket },
   { title: "Budget", subtitle: "Bientôt disponible", color: "accent", Icon: IconWallet },
   { title: "Calendrier", subtitle: "Bientôt disponible", color: "calendar", Icon: IconCalendar },
 ] as const;
@@ -226,6 +252,19 @@ export default function Home() {
     if (view !== "home" || weatherStatus !== "idle") return;
     let cancelled = false;
 
+    const cached = readWeatherCache();
+    if (cached) {
+      Promise.resolve().then(() => {
+        if (!cancelled) {
+          setWeather(cached);
+          setWeatherStatus("loaded");
+        }
+      });
+      return () => {
+        cancelled = true;
+      };
+    }
+
     const hasGeolocation = "geolocation" in navigator;
     const position = hasGeolocation
       ? new Promise<GeolocationPosition>((resolve, reject) => {
@@ -241,13 +280,15 @@ export default function Home() {
         );
         const data = await res.json();
         const { label, icon } = describeWeatherCode(data.current.weather_code);
+        const result: Weather = {
+          temperature: Math.round(data.current.temperature_2m),
+          label,
+          icon,
+        };
         if (!cancelled) {
-          setWeather({
-            temperature: Math.round(data.current.temperature_2m),
-            label,
-            icon,
-          });
+          setWeather(result);
           setWeatherStatus("loaded");
+          writeWeatherCache(result);
         }
       })
       .catch(() => {
