@@ -274,3 +274,21 @@ export async function deleteShoppingItem(
 
   return { ok: true };
 }
+
+export async function clearCheckedItems(
+  householdId: string,
+): Promise<SimpleResult> {
+  const supabase = getSupabaseServerClient();
+
+  const { error } = await supabase
+    .from("shopping_items")
+    .delete()
+    .eq("household_id", householdId)
+    .eq("checked", true);
+
+  if (error) {
+    return { ok: false, error: "Une erreur est survenue, réessayez." };
+  }
+
+  return { ok: true };
+}

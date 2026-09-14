@@ -12,6 +12,7 @@ import {
   addShoppingItem,
   toggleShoppingItem,
   deleteShoppingItem,
+  clearCheckedItems,
   type Household,
   type Profile,
   type ShoppingItem,
@@ -494,6 +495,12 @@ export default function Home() {
     await deleteShoppingItem(item.id);
   }
 
+  async function handleClearChecked() {
+    if (!householdId) return;
+    setShoppingItems((prev) => prev.filter((i) => !i.checked));
+    await clearCheckedItems(householdId);
+  }
+
   function backToChoice() {
     setError(null);
     setView("choice");
@@ -668,7 +675,8 @@ export default function Home() {
               Liste vide pour l&apos;instant — ajoute ton premier article.
             </p>
           ) : (
-            <div className="flex flex-col gap-2">
+            <>
+              <div className="flex flex-col gap-2">
               {shoppingItems.map((item) => (
                 <div
                   key={item.id}
@@ -722,7 +730,16 @@ export default function Home() {
                   </button>
                 </div>
               ))}
-            </div>
+              </div>
+              {shoppingItems.some((i) => i.checked) && (
+                <button
+                  onClick={handleClearChecked}
+                  className="mt-4 w-full rounded-xl border border-dashed border-border px-5 py-3 text-[15px] font-semibold text-text-muted transition-colors hover:border-accent hover:text-text"
+                >
+                  Vider les articles cochés
+                </button>
+              )}
+            </>
           )}
         </div>
       ) : (
