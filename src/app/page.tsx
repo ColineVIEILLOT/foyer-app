@@ -61,7 +61,7 @@ const TODAY_LABEL = new Intl.DateTimeFormat("fr-FR", {
   month: "long",
 }).format(new Date());
 
-const WEATHER_CACHE_KEY = "foyer-weather-cache";
+const WEATHER_CACHE_KEY = "foyer-weather-cache-v2";
 const WEATHER_CACHE_MAX_AGE_MS = 45 * 60 * 1000; // 45 minutes
 
 type WeatherCache = { weather: Weather; fetchedAt: number };
@@ -72,6 +72,7 @@ function readWeatherCache(): Weather | null {
     if (!raw) return null;
     const parsed = JSON.parse(raw) as WeatherCache;
     if (Date.now() - parsed.fetchedAt > WEATHER_CACHE_MAX_AGE_MS) return null;
+    if (!parsed.weather?.sunrise || !parsed.weather?.sunset) return null;
     return parsed.weather;
   } catch {
     return null;
