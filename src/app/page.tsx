@@ -4,29 +4,44 @@ import { useState, type FormEvent } from "react";
 
 type View = "choice" | "create" | "join";
 
-function HearthMark() {
+function ScribbleMark() {
   return (
-    <div className="relative flex h-16 w-16 items-center justify-center">
-      <div
-        className="absolute inset-0 rounded-full blur-xl opacity-60"
-        style={{ background: "var(--accent)" }}
-        aria-hidden
-      />
+    <div className="relative flex h-20 items-center justify-center">
       <svg
-        viewBox="0 0 48 48"
-        fill="none"
-        className="relative h-9 w-9"
+        viewBox="0 0 200 110"
+        className="absolute h-20 w-[210px]"
         aria-hidden
       >
-        <path
-          d="M24 6C24 6 14 17 14 26.5C14 33.4 18.5 38 24 38C29.5 38 34 33.4 34 26.5C34 22.7 31.8 19.2 29.6 16.6C29.9 19 29 21 27.4 22C27.7 19 26.4 15.8 24 12.5C24 15.3 22.6 17.4 21 19.3C19.1 21.6 17.8 23.9 17.8 26.5C17.8 30.3 20.4 32.8 24 32.8"
-          stroke="var(--bg)"
-          strokeWidth="2.4"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          fill="var(--bg)"
-        />
+        <g fill="none" stroke="var(--accent)" strokeLinecap="round">
+          <ellipse
+            cx="100"
+            cy="55"
+            rx="88"
+            ry="30"
+            transform="rotate(11 100 55)"
+            strokeWidth="3"
+          />
+          <ellipse
+            cx="96"
+            cy="53"
+            rx="82"
+            ry="33"
+            transform="rotate(-16 96 53)"
+            strokeWidth="2.5"
+          />
+          <ellipse
+            cx="103"
+            cy="57"
+            rx="70"
+            ry="25"
+            transform="rotate(48 103 57)"
+            strokeWidth="3"
+          />
+        </g>
       </svg>
+      <h1 className="relative font-display text-[2.6rem] font-extrabold leading-none tracking-tight text-text">
+        Foyer
+      </h1>
     </div>
   );
 }
@@ -85,22 +100,19 @@ export default function Home() {
       }}
     >
       <div className="w-full max-w-[380px]">
-        <div className="mb-9 flex flex-col items-center text-center">
-          <HearthMark />
-          <h1 className="mt-5 font-display text-[2.25rem] italic leading-none text-text">
-            Foyer
-          </h1>
-          <p className="mt-2 text-[15px] text-text-muted">
+        <div className="mb-8 flex flex-col items-center text-center">
+          <ScribbleMark />
+          <p className="mt-1 text-[15px] text-text-muted">
             L&apos;espace commun de votre maison
           </p>
         </div>
 
-        <div className="rounded-[28px] border border-border bg-surface p-7">
+        <div className="rounded-[28px] border border-border bg-surface p-7 shadow-[0_1px_0_0_rgba(28,23,18,0.03)]">
           {view === "choice" && (
             <div className="flex flex-col gap-3">
               <button
                 onClick={() => setView("create")}
-                className="w-full rounded-xl bg-accent px-5 py-3.5 text-[15px] font-semibold text-bg transition-colors hover:bg-accent-soft"
+                className="w-full rounded-xl bg-accent px-5 py-3.5 text-[15px] font-semibold text-surface transition-colors hover:bg-accent-soft"
               >
                 Créer un foyer
               </button>
@@ -122,7 +134,7 @@ export default function Home() {
               >
                 ← Retour
               </button>
-              <h2 className="font-display text-xl text-text">Nouveau foyer</h2>
+              <h2 className="font-display text-xl font-bold text-text">Nouveau foyer</h2>
               <div className="flex flex-col gap-1.5">
                 <FieldLabel htmlFor="create-name">Nom du foyer</FieldLabel>
                 <TextField id="create-name" placeholder="Maison Vieillot" />
@@ -139,7 +151,7 @@ export default function Home() {
               </div>
               <button
                 type="submit"
-                className="mt-2 w-full rounded-xl bg-accent px-5 py-3.5 text-[15px] font-semibold text-bg transition-colors hover:bg-accent-soft"
+                className="mt-2 w-full rounded-xl bg-accent px-5 py-3.5 text-[15px] font-semibold text-surface transition-colors hover:bg-accent-soft"
               >
                 Créer le foyer
               </button>
@@ -155,7 +167,7 @@ export default function Home() {
               >
                 ← Retour
               </button>
-              <h2 className="font-display text-xl text-text">Rejoindre un foyer</h2>
+              <h2 className="font-display text-xl font-bold text-text">Rejoindre un foyer</h2>
               <div className="flex flex-col gap-1.5">
                 <FieldLabel htmlFor="join-name">Nom du foyer</FieldLabel>
                 <TextField id="join-name" placeholder="Maison Vieillot" />
@@ -166,7 +178,7 @@ export default function Home() {
               </div>
               <button
                 type="submit"
-                className="mt-2 w-full rounded-xl bg-accent px-5 py-3.5 text-[15px] font-semibold text-bg transition-colors hover:bg-accent-soft"
+                className="mt-2 w-full rounded-xl bg-accent px-5 py-3.5 text-[15px] font-semibold text-surface transition-colors hover:bg-accent-soft"
               >
                 Entrer
               </button>

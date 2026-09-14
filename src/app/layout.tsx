@@ -1,12 +1,11 @@
 import type { Metadata, Viewport } from "next";
-import { Fraunces, Manrope } from "next/font/google";
+import { Baloo_2, Manrope } from "next/font/google";
 import "./globals.css";
 
-const fraunces = Fraunces({
-  variable: "--font-fraunces",
+const baloo = Baloo_2({
+  variable: "--font-baloo",
   subsets: ["latin"],
-  weight: ["500", "600"],
-  style: ["normal", "italic"],
+  weight: ["600", "700", "800"],
 });
 
 const manrope = Manrope({
@@ -20,7 +19,7 @@ export const metadata: Metadata = {
   description: "L'espace commun de votre foyer",
   appleWebApp: {
     capable: true,
-    statusBarStyle: "black-translucent",
+    statusBarStyle: "default",
     title: "Foyer",
   },
 };
@@ -30,14 +29,14 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 1,
   viewportFit: "cover",
-  themeColor: "#1c1815",
+  themeColor: "#f5f1e8",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="fr"
-      className={`${fraunces.variable} ${manrope.variable} h-full antialiased`}
+      className={`${baloo.variable} ${manrope.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col bg-bg text-text">
         {children}
