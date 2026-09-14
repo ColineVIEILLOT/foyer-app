@@ -21,6 +21,40 @@ type View =
   | "new-profile"
   | "home";
 
+type Weather = { temperature: number; label: string; icon: string };
+
+const WEATHER_CODES: Record<number, { label: string; icon: string }> = {
+  0: { label: "Ciel dégagé", icon: "☀️" },
+  1: { label: "Plutôt dégagé", icon: "🌤️" },
+  2: { label: "Partiellement nuageux", icon: "⛅" },
+  3: { label: "Couvert", icon: "☁️" },
+  45: { label: "Brouillard", icon: "🌫️" },
+  48: { label: "Brouillard givrant", icon: "🌫️" },
+  51: { label: "Bruine légère", icon: "🌦️" },
+  53: { label: "Bruine", icon: "🌦️" },
+  55: { label: "Bruine forte", icon: "🌧️" },
+  61: { label: "Pluie légère", icon: "🌧️" },
+  63: { label: "Pluie", icon: "🌧️" },
+  65: { label: "Forte pluie", icon: "🌧️" },
+  71: { label: "Neige légère", icon: "🌨️" },
+  73: { label: "Neige", icon: "🌨️" },
+  75: { label: "Forte neige", icon: "❄️" },
+  80: { label: "Averses", icon: "🌦️" },
+  81: { label: "Averses fortes", icon: "🌧️" },
+  82: { label: "Averses violentes", icon: "⛈️" },
+  95: { label: "Orage", icon: "⛈️" },
+};
+
+function describeWeatherCode(code: number) {
+  return WEATHER_CODES[code] ?? { label: "Météo indisponible", icon: "🌡️" };
+}
+
+const TODAY_LABEL = new Intl.DateTimeFormat("fr-FR", {
+  weekday: "long",
+  day: "numeric",
+  month: "long",
+}).format(new Date());
+
 function LogoMark() {
   return (
     <Image
@@ -101,6 +135,47 @@ export default function Home() {
   const [joinTarget, setJoinTarget] = useState<Household | null>(null);
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [activeProfile, setActiveProfile] = useState<string | null>(null);
+  const [weather, setWeather] = useState<Weather | null>(null);
+  const [weatherStatus, setWeatherStatus] = useState<
+    "idle" | "loaded" | "error"
+  >("idle");
+
+  useEffect(() => {
+    if (view !== "home" || weatherStatus !== "idle") return;
+    let cancelled = false;
+
+    const hasGeolocation = "geolocation" in navigator;
+    const position = hasGeolocation
+      ? new Promise<GeolocationPosition>((resolve, reject) => {
+          navigator.geolocation.getCurrentPosition(resolve, reject);
+        })
+      : Promise.reject(new Error("Géolocalisation non disponible."));
+
+    position
+      .then(async (pos) => {
+        const { latitude, longitude } = pos.coords;
+        const res = await fetch(
+          `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,weather_code`,
+        );
+        const data = await res.json();
+        const { label, icon } = describeWeatherCode(data.current.weather_code);
+        if (!cancelled) {
+          setWeather({
+            temperature: Math.round(data.current.temperature_2m),
+            label,
+            icon,
+          });
+          setWeatherStatus("loaded");
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setWeatherStatus("error");
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [view, weatherStatus]);
 
   useEffect(() => {
     if (view !== "join") return;
@@ -198,204 +273,262 @@ export default function Home() {
         paddingBottom: "max(env(safe-area-inset-bottom), 2rem)",
       }}
     >
-      <div className="w-full max-w-[380px]">
-        <div className="mb-8 flex flex-col items-center text-center">
-          <LogoMark />
-          <p className="mt-1 text-[15px] text-text-muted">
-            {view === "profiles" || view === "new-profile" || view === "home"
-              ? householdName
-              : "L'espace commun de votre maison"}
-          </p>
-        </div>
-
-        <div className="rounded-[28px] border border-border bg-surface p-7 shadow-[0_1px_0_0_rgba(28,23,18,0.03)]">
-          {view === "choice" && (
-            <div className="flex flex-col gap-3">
-              <button
-                onClick={() => setView("create")}
-                className="w-full rounded-xl bg-accent px-5 py-3.5 text-[15px] font-semibold text-surface transition-colors hover:bg-accent-soft"
-              >
-                Créer un foyer
-              </button>
-              <button
-                onClick={() => setView("join")}
-                className="w-full rounded-xl border border-border px-5 py-3.5 text-[15px] font-semibold text-text transition-colors hover:border-accent"
-              >
-                Rejoindre un foyer
-              </button>
+      {view === "home" ? (
+        <div className="w-full max-w-[380px]">
+          <div className="mb-6 flex items-center justify-between">
+            <div>
+              <p className="text-sm capitalize text-text-muted">{TODAY_LABEL}</p>
+              <h1 className="font-display text-2xl font-bold text-text">
+                Salut {activeProfile}
+              </h1>
             </div>
-          )}
+            <Image
+              src="/logo.png"
+              alt="Home"
+              width={112}
+              height={112}
+              className="h-11 w-11 shrink-0"
+            />
+          </div>
 
-          {view === "create" && (
-            <form onSubmit={handleCreate} className="flex flex-col gap-4">
-              <button
-                type="button"
-                onClick={backToChoice}
-                className="mb-1 self-start text-sm text-text-muted transition-colors hover:text-text"
-              >
-                ← Retour
-              </button>
-              <h2 className="font-display text-xl font-bold text-text">Nouveau foyer</h2>
-              <div className="flex flex-col gap-1.5">
-                <FieldLabel htmlFor="create-name">Nom du foyer</FieldLabel>
-                <TextField id="create-name" placeholder="Maison Vieillot" />
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <FieldLabel htmlFor="create-code">Code à 6 chiffres</FieldLabel>
-                <CodeField id="create-code" />
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <FieldLabel htmlFor="create-code-confirm">Confirmer le code</FieldLabel>
-                <CodeField id="create-code-confirm" />
-              </div>
-              <ErrorText message={error} />
-              <button
-                type="submit"
-                disabled={pending}
-                className="mt-2 w-full rounded-xl bg-accent px-5 py-3.5 text-[15px] font-semibold text-surface transition-colors hover:bg-accent-soft disabled:opacity-60"
-              >
-                {pending ? "Création…" : "Créer le foyer"}
-              </button>
-            </form>
-          )}
+          <div className="mb-4 flex items-center gap-3 rounded-2xl border border-border bg-surface px-5 py-4">
+            {weatherStatus === "loaded" && weather ? (
+              <>
+                <span className="text-3xl">{weather.icon}</span>
+                <div>
+                  <p className="text-[15px] font-semibold text-text">
+                    {weather.temperature}°C
+                  </p>
+                  <p className="text-sm text-text-muted">{weather.label}</p>
+                </div>
+              </>
+            ) : (
+              <p className="text-sm text-text-muted">
+                {weatherStatus === "error"
+                  ? "Météo indisponible pour le moment."
+                  : "Chargement de la météo…"}
+              </p>
+            )}
+          </div>
 
-          {view === "join" && (
-            <div className="flex flex-col gap-4">
-              <button
-                type="button"
-                onClick={backToChoice}
-                className="mb-1 self-start text-sm text-text-muted transition-colors hover:text-text"
+          <div className="mb-6 rounded-2xl border border-border bg-surface px-5 py-4">
+            <p className="mb-1 text-[15px] font-semibold text-text">
+              Aujourd&apos;hui
+            </p>
+            <p className="text-sm text-text-muted">
+              Rien de prévu pour l&apos;instant — l&apos;agenda du foyer
+              arrive avec l&apos;onglet Calendrier.
+            </p>
+          </div>
+
+          <div className="flex flex-col gap-3">
+            {[
+              { title: "Courses", subtitle: "Bientôt disponible" },
+              { title: "Budget", subtitle: "Bientôt disponible" },
+              { title: "Calendrier", subtitle: "Bientôt disponible" },
+            ].map((card) => (
+              <div
+                key={card.title}
+                className="flex items-center justify-between rounded-2xl border border-border bg-surface px-5 py-4 opacity-70"
               >
-                ← Retour
-              </button>
-              <h2 className="font-display text-xl font-bold text-text">Rejoindre un foyer</h2>
-              {households.length === 0 ? (
-                <p className="text-[15px] text-text-muted">
-                  Aucun foyer trouvé pour l&apos;instant.
-                </p>
-              ) : (
+                <span className="text-[15px] font-semibold text-text">
+                  {card.title}
+                </span>
+                <span className="text-sm text-text-muted">
+                  {card.subtitle}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : (
+        <div className="w-full max-w-[380px]">
+          <div className="mb-8 flex flex-col items-center text-center">
+            <LogoMark />
+            <p className="mt-1 text-[15px] text-text-muted">
+              {view === "profiles" || view === "new-profile"
+                ? householdName
+                : "L'espace commun de votre maison"}
+            </p>
+          </div>
+
+          <div className="rounded-[28px] border border-border bg-surface p-7 shadow-[0_1px_0_0_rgba(28,23,18,0.03)]">
+            {view === "choice" && (
+              <div className="flex flex-col gap-3">
+                <button
+                  onClick={() => setView("create")}
+                  className="w-full rounded-xl bg-accent px-5 py-3.5 text-[15px] font-semibold text-surface transition-colors hover:bg-accent-soft"
+                >
+                  Créer un foyer
+                </button>
+                <button
+                  onClick={() => setView("join")}
+                  className="w-full rounded-xl border border-border px-5 py-3.5 text-[15px] font-semibold text-text transition-colors hover:border-accent"
+                >
+                  Rejoindre un foyer
+                </button>
+              </div>
+            )}
+
+            {view === "create" && (
+              <form onSubmit={handleCreate} className="flex flex-col gap-4">
+                <button
+                  type="button"
+                  onClick={backToChoice}
+                  className="mb-1 self-start text-sm text-text-muted transition-colors hover:text-text"
+                >
+                  ← Retour
+                </button>
+                <h2 className="font-display text-xl font-bold text-text">Nouveau foyer</h2>
+                <div className="flex flex-col gap-1.5">
+                  <FieldLabel htmlFor="create-name">Nom du foyer</FieldLabel>
+                  <TextField id="create-name" placeholder="Maison Vieillot" />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <FieldLabel htmlFor="create-code">Code à 6 chiffres</FieldLabel>
+                  <CodeField id="create-code" />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <FieldLabel htmlFor="create-code-confirm">Confirmer le code</FieldLabel>
+                  <CodeField id="create-code-confirm" />
+                </div>
+                <ErrorText message={error} />
+                <button
+                  type="submit"
+                  disabled={pending}
+                  className="mt-2 w-full rounded-xl bg-accent px-5 py-3.5 text-[15px] font-semibold text-surface transition-colors hover:bg-accent-soft disabled:opacity-60"
+                >
+                  {pending ? "Création…" : "Créer le foyer"}
+                </button>
+              </form>
+            )}
+
+            {view === "join" && (
+              <div className="flex flex-col gap-4">
+                <button
+                  type="button"
+                  onClick={backToChoice}
+                  className="mb-1 self-start text-sm text-text-muted transition-colors hover:text-text"
+                >
+                  ← Retour
+                </button>
+                <h2 className="font-display text-xl font-bold text-text">Rejoindre un foyer</h2>
+                {households.length === 0 ? (
+                  <p className="text-[15px] text-text-muted">
+                    Aucun foyer trouvé pour l&apos;instant.
+                  </p>
+                ) : (
+                  <div className="flex flex-col gap-2">
+                    {households.map((household) => (
+                      <button
+                        key={household.id}
+                        onClick={() => selectHouseholdToJoin(household)}
+                        className="flex items-center gap-3 rounded-xl border border-border px-4 py-3 text-left transition-colors hover:border-accent"
+                      >
+                        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-surface-2 text-[13px] font-semibold text-text">
+                          {initials(household.name)}
+                        </span>
+                        <span className="text-[15px] font-medium text-text">
+                          {household.name}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {view === "join-code" && joinTarget && (
+              <form onSubmit={handleJoin} className="flex flex-col gap-4">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setError(null);
+                    setView("join");
+                  }}
+                  className="mb-1 self-start text-sm text-text-muted transition-colors hover:text-text"
+                >
+                  ← Retour
+                </button>
+                <h2 className="font-display text-xl font-bold text-text">
+                  {joinTarget.name}
+                </h2>
+                <div className="flex flex-col gap-1.5">
+                  <FieldLabel htmlFor="join-code">Code à 6 chiffres</FieldLabel>
+                  <CodeField id="join-code" />
+                </div>
+                <ErrorText message={error} />
+                <button
+                  type="submit"
+                  disabled={pending}
+                  className="mt-2 w-full rounded-xl bg-accent px-5 py-3.5 text-[15px] font-semibold text-surface transition-colors hover:bg-accent-soft disabled:opacity-60"
+                >
+                  {pending ? "Vérification…" : "Entrer"}
+                </button>
+              </form>
+            )}
+
+            {view === "profiles" && (
+              <div className="flex flex-col gap-4">
+                <h2 className="font-display text-xl font-bold text-text">Qui es-tu ?</h2>
                 <div className="flex flex-col gap-2">
-                  {households.map((household) => (
+                  {profiles.map((profile) => (
                     <button
-                      key={household.id}
-                      onClick={() => selectHouseholdToJoin(household)}
+                      key={profile.id}
+                      onClick={() => selectProfile(profile)}
                       className="flex items-center gap-3 rounded-xl border border-border px-4 py-3 text-left transition-colors hover:border-accent"
                     >
                       <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-surface-2 text-[13px] font-semibold text-text">
-                        {initials(household.name)}
+                        {initials(profile.name)}
                       </span>
                       <span className="text-[15px] font-medium text-text">
-                        {household.name}
+                        {profile.name}
                       </span>
                     </button>
                   ))}
                 </div>
-              )}
-            </div>
-          )}
-
-          {view === "join-code" && joinTarget && (
-            <form onSubmit={handleJoin} className="flex flex-col gap-4">
-              <button
-                type="button"
-                onClick={() => {
-                  setError(null);
-                  setView("join");
-                }}
-                className="mb-1 self-start text-sm text-text-muted transition-colors hover:text-text"
-              >
-                ← Retour
-              </button>
-              <h2 className="font-display text-xl font-bold text-text">
-                {joinTarget.name}
-              </h2>
-              <div className="flex flex-col gap-1.5">
-                <FieldLabel htmlFor="join-code">Code à 6 chiffres</FieldLabel>
-                <CodeField id="join-code" />
+                <button
+                  onClick={() => {
+                    setError(null);
+                    setView("new-profile");
+                  }}
+                  className="w-full rounded-xl border border-dashed border-border px-5 py-3.5 text-[15px] font-semibold text-text-muted transition-colors hover:border-accent hover:text-text"
+                >
+                  + Ajouter un profil
+                </button>
               </div>
-              <ErrorText message={error} />
-              <button
-                type="submit"
-                disabled={pending}
-                className="mt-2 w-full rounded-xl bg-accent px-5 py-3.5 text-[15px] font-semibold text-surface transition-colors hover:bg-accent-soft disabled:opacity-60"
-              >
-                {pending ? "Vérification…" : "Entrer"}
-              </button>
-            </form>
-          )}
+            )}
 
-          {view === "profiles" && (
-            <div className="flex flex-col gap-4">
-              <h2 className="font-display text-xl font-bold text-text">Qui es-tu ?</h2>
-              <div className="flex flex-col gap-2">
-                {profiles.map((profile) => (
-                  <button
-                    key={profile.id}
-                    onClick={() => selectProfile(profile)}
-                    className="flex items-center gap-3 rounded-xl border border-border px-4 py-3 text-left transition-colors hover:border-accent"
-                  >
-                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-surface-2 text-[13px] font-semibold text-text">
-                      {initials(profile.name)}
-                    </span>
-                    <span className="text-[15px] font-medium text-text">
-                      {profile.name}
-                    </span>
-                  </button>
-                ))}
-              </div>
-              <button
-                onClick={() => {
-                  setError(null);
-                  setView("new-profile");
-                }}
-                className="w-full rounded-xl border border-dashed border-border px-5 py-3.5 text-[15px] font-semibold text-text-muted transition-colors hover:border-accent hover:text-text"
-              >
-                + Ajouter un profil
-              </button>
-            </div>
-          )}
-
-          {view === "new-profile" && (
-            <form onSubmit={handleNewProfile} className="flex flex-col gap-4">
-              <button
-                type="button"
-                onClick={() => {
-                  setError(null);
-                  setView("profiles");
-                }}
-                className="mb-1 self-start text-sm text-text-muted transition-colors hover:text-text"
-              >
-                ← Retour
-              </button>
-              <h2 className="font-display text-xl font-bold text-text">Nouveau profil</h2>
-              <div className="flex flex-col gap-1.5">
-                <FieldLabel htmlFor="profile-name">Prénom</FieldLabel>
-                <TextField id="profile-name" placeholder="Léa" />
-              </div>
-              <ErrorText message={error} />
-              <button
-                type="submit"
-                disabled={pending}
-                className="mt-2 w-full rounded-xl bg-accent px-5 py-3.5 text-[15px] font-semibold text-surface transition-colors hover:bg-accent-soft disabled:opacity-60"
-              >
-                {pending ? "Création…" : "Créer le profil"}
-              </button>
-            </form>
-          )}
-
-          {view === "home" && (
-            <div className="flex flex-col items-center gap-2 py-4 text-center">
-              <h2 className="font-display text-xl font-bold text-text">
-                Salut {activeProfile} 👋
-              </h2>
-              <p className="text-[15px] text-text-muted">
-                L&apos;accueil du foyer (courses, budget, calendrier…) arrive
-                à la prochaine étape.
-              </p>
-            </div>
-          )}
+            {view === "new-profile" && (
+              <form onSubmit={handleNewProfile} className="flex flex-col gap-4">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setError(null);
+                    setView("profiles");
+                  }}
+                  className="mb-1 self-start text-sm text-text-muted transition-colors hover:text-text"
+                >
+                  ← Retour
+                </button>
+                <h2 className="font-display text-xl font-bold text-text">Nouveau profil</h2>
+                <div className="flex flex-col gap-1.5">
+                  <FieldLabel htmlFor="profile-name">Prénom</FieldLabel>
+                  <TextField id="profile-name" placeholder="Léa" />
+                </div>
+                <ErrorText message={error} />
+                <button
+                  type="submit"
+                  disabled={pending}
+                  className="mt-2 w-full rounded-xl bg-accent px-5 py-3.5 text-[15px] font-semibold text-surface transition-colors hover:bg-accent-soft disabled:opacity-60"
+                >
+                  {pending ? "Création…" : "Créer le profil"}
+                </button>
+              </form>
+            )}
+          </div>
         </div>
-      </div>
+      )}
     </main>
   );
 }
