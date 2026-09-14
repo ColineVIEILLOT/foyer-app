@@ -21,7 +21,13 @@ type View =
   | "new-profile"
   | "home";
 
-type Weather = { temperature: number; label: string; icon: string };
+type Weather = {
+  temperature: number;
+  label: string;
+  icon: string;
+  sunrise: string;
+  sunset: string;
+};
 
 const WEATHER_CODES: Record<number, { label: string; icon: string }> = {
   0: { label: "Ciel dégagé", icon: "☀️" },
@@ -86,6 +92,65 @@ function getGreeting() {
   if (hour < 12) return "Bonjour";
   if (hour < 18) return "Bon après-midi";
   return "Bonsoir";
+}
+
+function dayOfYear(date: Date) {
+  const start = new Date(date.getFullYear(), 0, 0);
+  const diff = date.getTime() - start.getTime();
+  return Math.floor(diff / 86400000);
+}
+
+function getDayProgress(sunriseISO: string, sunsetISO: string) {
+  const now = Date.now();
+  const sunrise = new Date(sunriseISO).getTime();
+  const sunset = new Date(sunsetISO).getTime();
+  if (now <= sunrise) return 0;
+  if (now >= sunset) return 1;
+  return (now - sunrise) / (sunset - sunrise);
+}
+
+function formatTime(iso: string) {
+  return new Date(iso).toLocaleTimeString("fr-FR", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+const DAILY_FACTS = [
+  "Le miel ne périme jamais : on en a retrouvé de comestible dans des tombes égyptiennes vieilles de 3000 ans.",
+  "Un escargot peut dormir jusqu'à trois ans d'affilée en cas de conditions trop sèches.",
+  "La tour Eiffel grandit d'environ 15 cm en été à cause de la dilatation du métal.",
+  "Les poulpes ont trois cœurs et du sang bleu.",
+  "Il pleut des diamants sur Neptune et Uranus, selon les modèles des scientifiques.",
+  "Le cœur d'une crevette se trouve dans sa tête.",
+  "Un jour sur Vénus dure plus longtemps qu'une année vénusienne.",
+  "Les bananes sont légèrement radioactives à cause de leur teneur en potassium.",
+  "La grande muraille de Chine n'est pas visible à l'œil nu depuis l'espace, contrairement à une idée reçue.",
+  "Les empreintes de nez des chiens sont uniques, comme nos empreintes digitales.",
+  "Le mot 'OK' est l'un des termes les plus utilisés et compris dans le monde entier.",
+  "Une étoile filante n'est en réalité qu'un grain de poussière brûlant dans l'atmosphère.",
+  "Les flamants roses doivent leur couleur à leur alimentation riche en crevettes et algues.",
+  "Le Mont Everest grandit encore d'environ 4 mm chaque année.",
+  "Les koalas ont des empreintes digitales presque impossibles à distinguer de celles des humains.",
+  "L'ADN humain est identique à environ 60% à celui d'une banane.",
+  "Le premier ordinateur pesait plus de 27 tonnes.",
+  "Les hippopotames peuvent courir plus vite qu'un humain sur de courtes distances.",
+  "Il existe plus de combinaisons possibles au jeu d'échecs que d'atomes dans l'univers observable.",
+  "La tour de Pise penche un peu plus chaque année.",
+  "Les manchots empereurs peuvent plonger à plus de 500 mètres de profondeur.",
+  "Le Sahara a été une région verdoyante il y a environ 6000 ans.",
+  "Un nuage moyen pèse environ 500 tonnes.",
+  "La Joconde n'a pas de sourcils, une mode de l'époque à la cour florentine.",
+  "Les castors peuvent retenir leur respiration jusqu'à 15 minutes sous l'eau.",
+  "Il y a plus d'arbres sur Terre que d'étoiles dans notre galaxie.",
+  "Le cerveau humain utilise environ 20% de l'énergie totale du corps.",
+  "Les girafes n'ont que sept vertèbres cervicales, comme les humains.",
+  "L'orage le plus long jamais mesuré a duré plus de 16 heures.",
+  "Le miel de lavande change littéralement de couleur selon la saison de récolte.",
+] as const;
+
+function getDailyFact() {
+  return DAILY_FACTS[dayOfYear(new Date()) % DAILY_FACTS.length];
 }
 
 function IconBasket() {
@@ -276,7 +341,7 @@ export default function Home() {
       .then(async (pos) => {
         const { latitude, longitude } = pos.coords;
         const res = await fetch(
-          `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,weather_code`,
+          `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,weather_code&daily=sunrise,sunset&timezone=auto`,
         );
         const data = await res.json();
         const { label, icon } = describeWeatherCode(data.current.weather_code);
@@ -284,6 +349,8 @@ export default function Home() {
           temperature: Math.round(data.current.temperature_2m),
           label,
           icon,
+          sunrise: data.daily.sunrise[0],
+          sunset: data.daily.sunset[0],
         };
         if (!cancelled) {
           setWeather(result);
@@ -414,15 +481,41 @@ export default function Home() {
             />
           </div>
 
-          <div className="mb-4 flex items-center gap-3 rounded-2xl border border-border bg-surface px-5 py-4">
+          <div className="mb-4 rounded-2xl border border-border bg-surface px-5 py-4">
             {weatherStatus === "loaded" && weather ? (
               <>
-                <span className="text-3xl">{weather.icon}</span>
-                <div>
-                  <p className="text-[15px] font-semibold text-text">
-                    {weather.temperature}°C
-                  </p>
-                  <p className="text-sm text-text-muted">{weather.label}</p>
+                <div className="flex items-center gap-3">
+                  <span className="text-3xl">{weather.icon}</span>
+                  <div>
+                    <p className="text-[15px] font-semibold text-text">
+                      {weather.temperature}°C
+                    </p>
+                    <p className="text-sm text-text-muted">{weather.label}</p>
+                  </div>
+                </div>
+                <div className="mt-4">
+                  <div className="relative h-1.5 rounded-full bg-surface-2">
+                    <div
+                      className="absolute inset-y-0 left-0 rounded-full"
+                      style={{
+                        width: `${getDayProgress(weather.sunrise, weather.sunset) * 100}%`,
+                        background:
+                          "linear-gradient(90deg, var(--pink), var(--accent))",
+                      }}
+                    />
+                    <span
+                      className="absolute top-1/2 flex h-4 w-4 -translate-y-1/2 -translate-x-1/2 items-center justify-center rounded-full bg-accent text-[10px]"
+                      style={{
+                        left: `${getDayProgress(weather.sunrise, weather.sunset) * 100}%`,
+                      }}
+                    >
+                      ☀️
+                    </span>
+                  </div>
+                  <div className="mt-2 flex justify-between text-xs text-text-muted">
+                    <span>{formatTime(weather.sunrise)}</span>
+                    <span>{formatTime(weather.sunset)}</span>
+                  </div>
                 </div>
               </>
             ) : (
@@ -432,6 +525,13 @@ export default function Home() {
                   : "Chargement de la météo…"}
               </p>
             )}
+          </div>
+
+          <div className="mb-4 rounded-2xl border border-border bg-surface px-5 py-4">
+            <p className="mb-1 text-[15px] font-semibold text-text">
+              Le savais-tu ?
+            </p>
+            <p className="text-sm italic text-text-muted">{getDailyFact()}</p>
           </div>
 
           <div className="mb-6 rounded-2xl border border-border bg-surface px-5 py-4">
