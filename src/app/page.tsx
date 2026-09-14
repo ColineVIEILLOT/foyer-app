@@ -10,10 +10,10 @@ function LogoMark() {
     <Image
       src="/logo.png"
       alt="Home"
-      width={200}
-      height={200}
+      width={280}
+      height={280}
       priority
-      className="h-28 w-28"
+      className="h-44 w-44"
     />
   );
 }
