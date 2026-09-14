@@ -55,6 +55,88 @@ const TODAY_LABEL = new Intl.DateTimeFormat("fr-FR", {
   month: "long",
 }).format(new Date());
 
+function getGreeting() {
+  const hour = new Date().getHours();
+  if (hour < 12) return "Bonjour";
+  if (hour < 18) return "Bon après-midi";
+  return "Bonsoir";
+}
+
+function IconBasket() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5" aria-hidden>
+      <path
+        d="M4 9h16l-1.5 9.5a2 2 0 0 1-2 1.5H7.5a2 2 0 0 1-2-1.5L4 9Z"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M8 9V7a4 4 0 0 1 8 0v2"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+function IconWallet() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5" aria-hidden>
+      <rect
+        x="3.5"
+        y="6.5"
+        width="17"
+        height="12"
+        rx="2.5"
+        stroke="currentColor"
+        strokeWidth="1.8"
+      />
+      <path
+        d="M15.5 12.5h2.5"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+      />
+      <path
+        d="M7 6.5V6a2.5 2.5 0 0 1 2.5-2.5h5"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+function IconCalendar() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5" aria-hidden>
+      <rect
+        x="4"
+        y="5.5"
+        width="16"
+        height="15"
+        rx="2.5"
+        stroke="currentColor"
+        strokeWidth="1.8"
+      />
+      <path
+        d="M4 10h16M8 3.5v3M16 3.5v3"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+const DASHBOARD_CARDS = [
+  { title: "Courses", subtitle: "Bientôt disponible", color: "sage", Icon: IconBasket },
+  { title: "Budget", subtitle: "Bientôt disponible", color: "accent", Icon: IconWallet },
+  { title: "Calendrier", subtitle: "Bientôt disponible", color: "calendar", Icon: IconCalendar },
+] as const;
+
 function LogoMark() {
   return (
     <Image
@@ -279,7 +361,7 @@ export default function Home() {
             <div>
               <p className="text-sm capitalize text-text-muted">{TODAY_LABEL}</p>
               <h1 className="font-display text-2xl font-bold text-text">
-                Salut {activeProfile}
+                {getGreeting()}, {activeProfile}
               </h1>
             </div>
             <Image
@@ -322,20 +404,25 @@ export default function Home() {
           </div>
 
           <div className="flex flex-col gap-3">
-            {[
-              { title: "Courses", subtitle: "Bientôt disponible" },
-              { title: "Budget", subtitle: "Bientôt disponible" },
-              { title: "Calendrier", subtitle: "Bientôt disponible" },
-            ].map((card) => (
+            {DASHBOARD_CARDS.map(({ title, subtitle, color, Icon }) => (
               <div
-                key={card.title}
-                className="flex items-center justify-between rounded-2xl border border-border bg-surface px-5 py-4 opacity-70"
+                key={title}
+                className="flex items-center gap-3 rounded-2xl border border-border bg-surface px-5 py-4"
               >
-                <span className="text-[15px] font-semibold text-text">
-                  {card.title}
+                <span
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full"
+                  style={{
+                    backgroundColor: `color-mix(in srgb, var(--${color}) 18%, transparent)`,
+                    color: `var(--${color})`,
+                  }}
+                >
+                  <Icon />
                 </span>
-                <span className="text-sm text-text-muted">
-                  {card.subtitle}
+                <span className="flex-1 text-[15px] font-semibold text-text">
+                  {title}
+                </span>
+                <span className="rounded-full bg-surface-2 px-2.5 py-1 text-xs font-medium text-text-muted">
+                  {subtitle}
                 </span>
               </div>
             ))}

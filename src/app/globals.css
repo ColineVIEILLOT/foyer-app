@@ -7,6 +7,7 @@
   --accent: #eb5339;
   --accent-soft: #c93f28;
   --sage: #6f8a5c;
+  --calendar: #3e7c8c;
   --text: #000000;
   --text-muted: #8f8776;
   --border: #e4e1d7;
@@ -20,6 +21,7 @@
   --color-accent: var(--accent);
   --color-accent-soft: var(--accent-soft);
   --color-sage: var(--sage);
+  --color-calendar: var(--calendar);
   --color-text: var(--text);
   --color-text-muted: var(--text-muted);
   --color-border: var(--border);
