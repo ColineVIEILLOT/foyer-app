@@ -177,3 +177,100 @@ export async function createProfile(
   return { ok: true, profileId: inserted.id, profileName: name };
 }
 
+
+export type ShoppingItem = {
+  id: string;
+  name: string;
+  quantity: string | null;
+  checked: boolean;
+};
+
+export type ListShoppingItemsResult =
+  | { ok: true; items: ShoppingItem[] }
+  | { ok: false; error: string };
+
+export type ShoppingItemActionResult =
+  | { ok: true; item: ShoppingItem }
+  | { ok: false; error: string };
+
+export type SimpleResult = { ok: true } | { ok: false; error: string };
+
+export async function listShoppingItems(
+  householdId: string,
+): Promise<ListShoppingItemsResult> {
+  const supabase = getSupabaseServerClient();
+
+  const { data, error } = await supabase
+    .from("shopping_items")
+    .select("id, name, quantity, checked")
+    .eq("household_id", householdId)
+    .order("created_at", { ascending: true });
+
+  if (error) {
+    return { ok: false, error: "Impossible de charger la liste." };
+  }
+
+  return { ok: true, items: data ?? [] };
+}
+
+export async function addShoppingItem(
+  householdId: string,
+  formData: FormData,
+): Promise<ShoppingItemActionResult> {
+  const name = (formData.get("item-name") as string | null)?.trim() ?? "";
+  const quantity =
+    (formData.get("item-quantity") as string | null)?.trim() || null;
+
+  if (!name) {
+    return { ok: false, error: "Entrez un article." };
+  }
+
+  const supabase = getSupabaseServerClient();
+
+  const { data: inserted, error } = await supabase
+    .from("shopping_items")
+    .insert({ household_id: householdId, name, quantity })
+    .select("id, name, quantity, checked")
+    .single();
+
+  if (error || !inserted) {
+    return { ok: false, error: "Une erreur est survenue, réessayez." };
+  }
+
+  return { ok: true, item: inserted };
+}
+
+export async function toggleShoppingItem(
+  itemId: string,
+  checked: boolean,
+): Promise<SimpleResult> {
+  const supabase = getSupabaseServerClient();
+
+  const { error } = await supabase
+    .from("shopping_items")
+    .update({ checked })
+    .eq("id", itemId);
+
+  if (error) {
+    return { ok: false, error: "Une erreur est survenue, réessayez." };
+  }
+
+  return { ok: true };
+}
+
+export async function deleteShoppingItem(
+  itemId: string,
+): Promise<SimpleResult> {
+  const supabase = getSupabaseServerClient();
+
+  const { error } = await supabase
+    .from("shopping_items")
+    .delete()
+    .eq("id", itemId);
+
+  if (error) {
+    return { ok: false, error: "Une erreur est survenue, réessayez." };
+  }
+
+  return { ok: true };
+}

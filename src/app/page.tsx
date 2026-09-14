@@ -8,8 +8,13 @@ import {
   listHouseholds,
   listProfiles,
   createProfile,
+  listShoppingItems,
+  addShoppingItem,
+  toggleShoppingItem,
+  deleteShoppingItem,
   type Household,
   type Profile,
+  type ShoppingItem,
 } from "./actions";
 
 type View =
@@ -19,7 +24,8 @@ type View =
   | "join-code"
   | "profiles"
   | "new-profile"
-  | "home";
+  | "home"
+  | "courses";
 
 type Weather = {
   temperature: number;
@@ -309,6 +315,7 @@ export default function Home() {
   const [joinTarget, setJoinTarget] = useState<Household | null>(null);
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [activeProfile, setActiveProfile] = useState<string | null>(null);
+  const [shoppingItems, setShoppingItems] = useState<ShoppingItem[]>([]);
   const [weather, setWeather] = useState<Weather | null>(null);
   const [weatherStatus, setWeatherStatus] = useState<
     "idle" | "loaded" | "error"
@@ -394,6 +401,19 @@ export default function Home() {
     };
   }, [view, householdId]);
 
+  useEffect(() => {
+    if ((view !== "courses" && view !== "home") || !householdId) return;
+    let cancelled = false;
+    listShoppingItems(householdId).then((result) => {
+      if (!cancelled && result.ok) {
+        setShoppingItems(result.items);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [view, householdId]);
+
   async function handleCreate(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError(null);
@@ -449,6 +469,29 @@ export default function Home() {
   function selectProfile(profile: Profile) {
     setActiveProfile(profile.name);
     setView("home");
+  }
+
+  async function handleAddItem(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!householdId) return;
+    const form = e.currentTarget;
+    const result = await addShoppingItem(householdId, new FormData(form));
+    if (result.ok) {
+      setShoppingItems((prev) => [...prev, result.item]);
+      form.reset();
+    }
+  }
+
+  async function handleToggleItem(item: ShoppingItem) {
+    setShoppingItems((prev) =>
+      prev.map((i) => (i.id === item.id ? { ...i, checked: !i.checked } : i)),
+    );
+    await toggleShoppingItem(item.id, !item.checked);
+  }
+
+  async function handleDeleteItem(item: ShoppingItem) {
+    setShoppingItems((prev) => prev.filter((i) => i.id !== item.id));
+    await deleteShoppingItem(item.id);
   }
 
   function backToChoice() {
@@ -546,29 +589,141 @@ export default function Home() {
           </div>
 
           <div className="flex flex-col gap-3">
-            {DASHBOARD_CARDS.map(({ title, subtitle, color, Icon }) => (
-              <div
-                key={title}
-                className="flex items-center gap-3 rounded-2xl border border-border bg-surface px-5 py-4"
-              >
-                <span
-                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full"
-                  style={{
-                    backgroundColor: `color-mix(in srgb, var(--${color}) 18%, transparent)`,
-                    color: `var(--${color})`,
+            {DASHBOARD_CARDS.map(({ title, subtitle, color, Icon }) => {
+              const isCourses = title === "Courses";
+              const remaining = shoppingItems.filter((i) => !i.checked).length;
+              const badge = isCourses
+                ? remaining === 0
+                  ? "Liste vide"
+                  : `${remaining} article${remaining > 1 ? "s" : ""}`
+                : subtitle;
+              return (
+                <button
+                  key={title}
+                  onClick={() => {
+                    if (isCourses) setView("courses");
                   }}
+                  disabled={!isCourses}
+                  className="flex items-center gap-3 rounded-2xl border border-border bg-surface px-5 py-4 text-left transition-colors enabled:hover:border-accent disabled:cursor-default"
                 >
-                  <Icon />
-                </span>
-                <span className="flex-1 text-[15px] font-semibold text-text">
-                  {title}
-                </span>
-                <span className="rounded-full bg-surface-2 px-2.5 py-1 text-xs font-medium text-text-muted">
-                  {subtitle}
-                </span>
-              </div>
-            ))}
+                  <span
+                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full"
+                    style={{
+                      backgroundColor: `color-mix(in srgb, var(--${color}) 18%, transparent)`,
+                      color: `var(--${color})`,
+                    }}
+                  >
+                    <Icon />
+                  </span>
+                  <span className="flex-1 text-[15px] font-semibold text-text">
+                    {title}
+                  </span>
+                  <span className="rounded-full bg-surface-2 px-2.5 py-1 text-xs font-medium text-text-muted">
+                    {badge}
+                  </span>
+                </button>
+              );
+            })}
           </div>
+        </div>
+      ) : view === "courses" ? (
+        <div className="w-full max-w-[380px]">
+          <div className="mb-6 flex items-center gap-3">
+            <button
+              onClick={() => setView("home")}
+              className="text-sm text-text-muted transition-colors hover:text-text"
+            >
+              ← Retour
+            </button>
+          </div>
+          <h1 className="mb-5 font-display text-2xl font-bold text-text">
+            Courses
+          </h1>
+
+          <form
+            onSubmit={handleAddItem}
+            className="mb-5 flex gap-2 rounded-2xl border border-border bg-surface p-2"
+          >
+            <input
+              name="item-name"
+              placeholder="Ajouter un article"
+              required
+              className="min-w-0 flex-1 rounded-xl bg-transparent px-3 py-2 text-[15px] text-text outline-none placeholder:text-text-muted/60"
+            />
+            <input
+              name="item-quantity"
+              placeholder="Qté"
+              className="w-16 rounded-xl bg-surface-2 px-2 py-2 text-center text-[14px] text-text outline-none placeholder:text-text-muted/60"
+            />
+            <button
+              type="submit"
+              className="shrink-0 rounded-xl bg-accent px-4 py-2 text-[15px] font-semibold text-surface transition-colors hover:bg-accent-soft"
+            >
+              +
+            </button>
+          </form>
+
+          {shoppingItems.length === 0 ? (
+            <p className="text-[15px] text-text-muted">
+              Liste vide pour l&apos;instant — ajoute ton premier article.
+            </p>
+          ) : (
+            <div className="flex flex-col gap-2">
+              {shoppingItems.map((item) => (
+                <div
+                  key={item.id}
+                  className="flex items-center gap-3 rounded-xl border border-border bg-surface px-4 py-3"
+                >
+                  <button
+                    onClick={() => handleToggleItem(item)}
+                    aria-label={item.checked ? "Décocher" : "Cocher"}
+                    className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 transition-colors"
+                    style={{
+                      borderColor: item.checked
+                        ? "var(--pink)"
+                        : "var(--border)",
+                      backgroundColor: item.checked
+                        ? "var(--pink)"
+                        : "transparent",
+                    }}
+                  >
+                    {item.checked && (
+                      <svg viewBox="0 0 24 24" fill="none" className="h-3 w-3">
+                        <path
+                          d="M5 12.5 10 17 19 7"
+                          stroke="var(--surface)"
+                          strokeWidth="2.5"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                      </svg>
+                    )}
+                  </button>
+                  <span
+                    className={`flex-1 text-[15px] ${
+                      item.checked
+                        ? "text-text-muted line-through"
+                        : "text-text"
+                    }`}
+                  >
+                    {item.name}
+                  </span>
+                  {item.quantity && (
+                    <span className="text-sm text-text-muted">
+                      {item.quantity}
+                    </span>
+                  )}
+                  <button
+                    onClick={() => handleDeleteItem(item)}
+                    aria-label="Supprimer"
+                    className="text-text-muted transition-colors hover:text-danger"
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       ) : (
         <div className="w-full max-w-[380px]">
