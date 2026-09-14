@@ -5,8 +5,10 @@ import Image from "next/image";
 import {
   createHousehold,
   joinHousehold,
+  listHouseholds,
   listProfiles,
   createProfile,
+  type Household,
   type Profile,
 } from "./actions";
 
@@ -14,6 +16,7 @@ type View =
   | "choice"
   | "create"
   | "join"
+  | "join-code"
   | "profiles"
   | "new-profile"
   | "home";
@@ -94,8 +97,23 @@ export default function Home() {
 
   const [householdId, setHouseholdId] = useState<string | null>(null);
   const [householdName, setHouseholdName] = useState<string | null>(null);
+  const [households, setHouseholds] = useState<Household[]>([]);
+  const [joinTarget, setJoinTarget] = useState<Household | null>(null);
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [activeProfile, setActiveProfile] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (view !== "join") return;
+    let cancelled = false;
+    listHouseholds().then((result) => {
+      if (!cancelled && result.ok) {
+        setHouseholds(result.households);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [view]);
 
   useEffect(() => {
     if (view !== "profiles" || !householdId) return;
@@ -127,9 +145,10 @@ export default function Home() {
 
   async function handleJoin(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (!joinTarget) return;
     setError(null);
     setPending(true);
-    const result = await joinHousehold(new FormData(e.currentTarget));
+    const result = await joinHousehold(joinTarget.id, new FormData(e.currentTarget));
     setPending(false);
     if (result.ok) {
       setHouseholdId(result.householdId);
@@ -138,6 +157,12 @@ export default function Home() {
     } else {
       setError(result.error);
     }
+  }
+
+  function selectHouseholdToJoin(household: Household) {
+    setError(null);
+    setJoinTarget(household);
+    setView("join-code");
   }
 
   async function handleNewProfile(e: FormEvent<HTMLFormElement>) {
@@ -235,7 +260,7 @@ export default function Home() {
           )}
 
           {view === "join" && (
-            <form onSubmit={handleJoin} className="flex flex-col gap-4">
+            <div className="flex flex-col gap-4">
               <button
                 type="button"
                 onClick={backToChoice}
@@ -244,10 +269,46 @@ export default function Home() {
                 ← Retour
               </button>
               <h2 className="font-display text-xl font-bold text-text">Rejoindre un foyer</h2>
-              <div className="flex flex-col gap-1.5">
-                <FieldLabel htmlFor="join-name">Nom du foyer</FieldLabel>
-                <TextField id="join-name" placeholder="Maison Vieillot" />
-              </div>
+              {households.length === 0 ? (
+                <p className="text-[15px] text-text-muted">
+                  Aucun foyer trouvé pour l&apos;instant.
+                </p>
+              ) : (
+                <div className="flex flex-col gap-2">
+                  {households.map((household) => (
+                    <button
+                      key={household.id}
+                      onClick={() => selectHouseholdToJoin(household)}
+                      className="flex items-center gap-3 rounded-xl border border-border px-4 py-3 text-left transition-colors hover:border-accent"
+                    >
+                      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-surface-2 text-[13px] font-semibold text-text">
+                        {initials(household.name)}
+                      </span>
+                      <span className="text-[15px] font-medium text-text">
+                        {household.name}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {view === "join-code" && joinTarget && (
+            <form onSubmit={handleJoin} className="flex flex-col gap-4">
+              <button
+                type="button"
+                onClick={() => {
+                  setError(null);
+                  setView("join");
+                }}
+                className="mb-1 self-start text-sm text-text-muted transition-colors hover:text-text"
+              >
+                ← Retour
+              </button>
+              <h2 className="font-display text-xl font-bold text-text">
+                {joinTarget.name}
+              </h2>
               <div className="flex flex-col gap-1.5">
                 <FieldLabel htmlFor="join-code">Code à 6 chiffres</FieldLabel>
                 <CodeField id="join-code" />

@@ -7,6 +7,12 @@ export type ActionResult =
   | { ok: true; householdId: string; householdName: string }
   | { ok: false; error: string };
 
+export type Household = { id: string; name: string };
+
+export type ListHouseholdsResult =
+  | { ok: true; households: Household[] }
+  | { ok: false; error: string };
+
 export type ProfileActionResult =
   | { ok: true; profileId: string; profileName: string }
   | { ok: false; error: string };
@@ -66,32 +72,44 @@ export async function createHousehold(
   return { ok: true, householdId: inserted.id, householdName: name };
 }
 
+export async function listHouseholds(): Promise<ListHouseholdsResult> {
+  const supabase = getSupabaseServerClient();
+
+  const { data, error } = await supabase
+    .from("households")
+    .select("id, name")
+    .order("name", { ascending: true });
+
+  if (error) {
+    return { ok: false, error: "Impossible de charger les foyers." };
+  }
+
+  return { ok: true, households: data ?? [] };
+}
+
 export async function joinHousehold(
+  householdId: string,
   formData: FormData,
 ): Promise<ActionResult> {
-  const name = (formData.get("join-name") as string | null)?.trim() ?? "";
   const code = (formData.get("join-code") as string | null)?.trim() ?? "";
 
-  if (!name || !CODE_PATTERN.test(code)) {
-    return {
-      ok: false,
-      error: "Vérifiez le nom du foyer et le code à 6 chiffres.",
-    };
+  if (!CODE_PATTERN.test(code)) {
+    return { ok: false, error: "Le code doit contenir 6 chiffres." };
   }
 
   const supabase = getSupabaseServerClient();
 
   const { data: household, error } = await supabase
     .from("households")
-    .select("id, password_hash")
-    .eq("name", name)
+    .select("id, name, password_hash")
+    .eq("id", householdId)
     .maybeSingle();
 
   if (error) {
     return { ok: false, error: "Une erreur est survenue, réessayez." };
   }
   if (!household) {
-    return { ok: false, error: "Aucun foyer ne porte ce nom." };
+    return { ok: false, error: "Foyer introuvable." };
   }
 
   const valid = await bcrypt.compare(code, household.password_hash);
@@ -99,7 +117,7 @@ export async function joinHousehold(
     return { ok: false, error: "Code incorrect." };
   }
 
-  return { ok: true, householdId: household.id, householdName: name };
+  return { ok: true, householdId: household.id, householdName: household.name };
 }
 
 export async function listProfiles(
