@@ -3,7 +3,19 @@
 import bcrypt from "bcryptjs";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 
-export type ActionResult = { ok: true } | { ok: false; error: string };
+export type ActionResult =
+  | { ok: true; householdId: string; householdName: string }
+  | { ok: false; error: string };
+
+export type ProfileActionResult =
+  | { ok: true; profileId: string; profileName: string }
+  | { ok: false; error: string };
+
+export type Profile = { id: string; name: string };
+
+export type ListProfilesResult =
+  | { ok: true; profiles: Profile[] }
+  | { ok: false; error: string };
 
 const CODE_PATTERN = /^\d{6}$/;
 
@@ -41,15 +53,17 @@ export async function createHousehold(
   }
 
   const passwordHash = await bcrypt.hash(code, 10);
-  const { error: insertError } = await supabase
+  const { data: inserted, error: insertError } = await supabase
     .from("households")
-    .insert({ name, password_hash: passwordHash });
+    .insert({ name, password_hash: passwordHash })
+    .select("id")
+    .single();
 
-  if (insertError) {
+  if (insertError || !inserted) {
     return { ok: false, error: "Une erreur est survenue, réessayez." };
   }
 
-  return { ok: true };
+  return { ok: true, householdId: inserted.id, householdName: name };
 }
 
 export async function joinHousehold(
@@ -69,7 +83,7 @@ export async function joinHousehold(
 
   const { data: household, error } = await supabase
     .from("households")
-    .select("password_hash")
+    .select("id, password_hash")
     .eq("name", name)
     .maybeSingle();
 
@@ -85,5 +99,63 @@ export async function joinHousehold(
     return { ok: false, error: "Code incorrect." };
   }
 
-  return { ok: true };
+  return { ok: true, householdId: household.id, householdName: name };
 }
+
+export async function listProfiles(
+  householdId: string,
+): Promise<ListProfilesResult> {
+  const supabase = getSupabaseServerClient();
+
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("id, name")
+    .eq("household_id", householdId)
+    .order("created_at", { ascending: true });
+
+  if (error) {
+    return { ok: false, error: "Impossible de charger les profils." };
+  }
+
+  return { ok: true, profiles: data ?? [] };
+}
+
+export async function createProfile(
+  householdId: string,
+  formData: FormData,
+): Promise<ProfileActionResult> {
+  const name = (formData.get("profile-name") as string | null)?.trim() ?? "";
+
+  if (!name) {
+    return { ok: false, error: "Entrez un prénom." };
+  }
+
+  const supabase = getSupabaseServerClient();
+
+  const { data: existing, error: lookupError } = await supabase
+    .from("profiles")
+    .select("id")
+    .eq("household_id", householdId)
+    .eq("name", name)
+    .maybeSingle();
+
+  if (lookupError) {
+    return { ok: false, error: "Une erreur est survenue, réessayez." };
+  }
+  if (existing) {
+    return { ok: false, error: "Ce prénom existe déjà dans ce foyer." };
+  }
+
+  const { data: inserted, error: insertError } = await supabase
+    .from("profiles")
+    .insert({ household_id: householdId, name })
+    .select("id")
+    .single();
+
+  if (insertError || !inserted) {
+    return { ok: false, error: "Une erreur est survenue, réessayez." };
+  }
+
+  return { ok: true, profileId: inserted.id, profileName: name };
+}
+

@@ -1,10 +1,22 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import Image from "next/image";
-import { createHousehold, joinHousehold } from "./actions";
+import {
+  createHousehold,
+  joinHousehold,
+  listProfiles,
+  createProfile,
+  type Profile,
+} from "./actions";
 
-type View = "choice" | "create" | "join" | "success";
+type View =
+  | "choice"
+  | "create"
+  | "join"
+  | "profiles"
+  | "new-profile"
+  | "home";
 
 function LogoMark() {
   return (
@@ -49,13 +61,7 @@ function TextField({
   );
 }
 
-function CodeField({
-  id,
-  autoComplete,
-}: {
-  id: string;
-  autoComplete?: string;
-}) {
+function CodeField({ id }: { id: string }) {
   return (
     <input
       id={id}
@@ -65,7 +71,7 @@ function CodeField({
       pattern="\d{6}"
       maxLength={6}
       placeholder="000000"
-      autoComplete={autoComplete}
+      autoComplete="off"
       required
       className="w-full rounded-xl border border-border bg-surface-2 px-4 py-3 text-center text-[20px] tracking-[0.5em] text-text placeholder:text-text-muted/40 outline-none transition-colors focus:border-accent"
     />
@@ -77,10 +83,32 @@ function ErrorText({ message }: { message: string | null }) {
   return <p className="text-sm text-danger">{message}</p>;
 }
 
+function initials(name: string) {
+  return name.trim().slice(0, 2).toUpperCase();
+}
+
 export default function Home() {
   const [view, setView] = useState<View>("choice");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const [householdId, setHouseholdId] = useState<string | null>(null);
+  const [householdName, setHouseholdName] = useState<string | null>(null);
+  const [profiles, setProfiles] = useState<Profile[]>([]);
+  const [activeProfile, setActiveProfile] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (view !== "profiles" || !householdId) return;
+    let cancelled = false;
+    listProfiles(householdId).then((result) => {
+      if (!cancelled && result.ok) {
+        setProfiles(result.profiles);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [view, householdId]);
 
   async function handleCreate(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -89,7 +117,9 @@ export default function Home() {
     const result = await createHousehold(new FormData(e.currentTarget));
     setPending(false);
     if (result.ok) {
-      setView("success");
+      setHouseholdId(result.householdId);
+      setHouseholdName(result.householdName);
+      setView("profiles");
     } else {
       setError(result.error);
     }
@@ -102,10 +132,32 @@ export default function Home() {
     const result = await joinHousehold(new FormData(e.currentTarget));
     setPending(false);
     if (result.ok) {
-      setView("success");
+      setHouseholdId(result.householdId);
+      setHouseholdName(result.householdName);
+      setView("profiles");
     } else {
       setError(result.error);
     }
+  }
+
+  async function handleNewProfile(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!householdId) return;
+    setError(null);
+    setPending(true);
+    const result = await createProfile(householdId, new FormData(e.currentTarget));
+    setPending(false);
+    if (result.ok) {
+      setActiveProfile(result.profileName);
+      setView("home");
+    } else {
+      setError(result.error);
+    }
+  }
+
+  function selectProfile(profile: Profile) {
+    setActiveProfile(profile.name);
+    setView("home");
   }
 
   function backToChoice() {
@@ -125,7 +177,9 @@ export default function Home() {
         <div className="mb-8 flex flex-col items-center text-center">
           <LogoMark />
           <p className="mt-1 text-[15px] text-text-muted">
-            L&apos;espace commun de votre maison
+            {view === "profiles" || view === "new-profile" || view === "home"
+              ? householdName
+              : "L'espace commun de votre maison"}
           </p>
         </div>
 
@@ -163,11 +217,11 @@ export default function Home() {
               </div>
               <div className="flex flex-col gap-1.5">
                 <FieldLabel htmlFor="create-code">Code à 6 chiffres</FieldLabel>
-                <CodeField id="create-code" autoComplete="off" />
+                <CodeField id="create-code" />
               </div>
               <div className="flex flex-col gap-1.5">
                 <FieldLabel htmlFor="create-code-confirm">Confirmer le code</FieldLabel>
-                <CodeField id="create-code-confirm" autoComplete="off" />
+                <CodeField id="create-code-confirm" />
               </div>
               <ErrorText message={error} />
               <button
@@ -196,7 +250,7 @@ export default function Home() {
               </div>
               <div className="flex flex-col gap-1.5">
                 <FieldLabel htmlFor="join-code">Code à 6 chiffres</FieldLabel>
-                <CodeField id="join-code" autoComplete="off" />
+                <CodeField id="join-code" />
               </div>
               <ErrorText message={error} />
               <button
@@ -209,14 +263,73 @@ export default function Home() {
             </form>
           )}
 
-          {view === "success" && (
+          {view === "profiles" && (
+            <div className="flex flex-col gap-4">
+              <h2 className="font-display text-xl font-bold text-text">Qui es-tu ?</h2>
+              <div className="flex flex-col gap-2">
+                {profiles.map((profile) => (
+                  <button
+                    key={profile.id}
+                    onClick={() => selectProfile(profile)}
+                    className="flex items-center gap-3 rounded-xl border border-border px-4 py-3 text-left transition-colors hover:border-accent"
+                  >
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-surface-2 text-[13px] font-semibold text-text">
+                      {initials(profile.name)}
+                    </span>
+                    <span className="text-[15px] font-medium text-text">
+                      {profile.name}
+                    </span>
+                  </button>
+                ))}
+              </div>
+              <button
+                onClick={() => {
+                  setError(null);
+                  setView("new-profile");
+                }}
+                className="w-full rounded-xl border border-dashed border-border px-5 py-3.5 text-[15px] font-semibold text-text-muted transition-colors hover:border-accent hover:text-text"
+              >
+                + Ajouter un profil
+              </button>
+            </div>
+          )}
+
+          {view === "new-profile" && (
+            <form onSubmit={handleNewProfile} className="flex flex-col gap-4">
+              <button
+                type="button"
+                onClick={() => {
+                  setError(null);
+                  setView("profiles");
+                }}
+                className="mb-1 self-start text-sm text-text-muted transition-colors hover:text-text"
+              >
+                ← Retour
+              </button>
+              <h2 className="font-display text-xl font-bold text-text">Nouveau profil</h2>
+              <div className="flex flex-col gap-1.5">
+                <FieldLabel htmlFor="profile-name">Prénom</FieldLabel>
+                <TextField id="profile-name" placeholder="Léa" />
+              </div>
+              <ErrorText message={error} />
+              <button
+                type="submit"
+                disabled={pending}
+                className="mt-2 w-full rounded-xl bg-accent px-5 py-3.5 text-[15px] font-semibold text-surface transition-colors hover:bg-accent-soft disabled:opacity-60"
+              >
+                {pending ? "Création…" : "Créer le profil"}
+              </button>
+            </form>
+          )}
+
+          {view === "home" && (
             <div className="flex flex-col items-center gap-2 py-4 text-center">
               <h2 className="font-display text-xl font-bold text-text">
-                C&apos;est fait !
+                Salut {activeProfile} 👋
               </h2>
               <p className="text-[15px] text-text-muted">
-                Le foyer est enregistré. La suite (profils, accueil commun)
-                arrive à la prochaine étape.
+                L&apos;accueil du foyer (courses, budget, calendrier…) arrive
+                à la prochaine étape.
               </p>
             </div>
           )}
