@@ -26,3 +26,13 @@ export const RECIPE_TAGS = [
   "Végétarien",
   "En famille",
 ] as const;
+
+export const CATEGORY_ICONS: Record<string, string> = {
+  "Viande/Poisson": "🍖",
+  Légume: "🥦",
+  Fruit: "🍎",
+  Féculent: "🍞",
+  "Produit laitier": "🧀",
+  Épicerie: "🧂",
+  Autre: "🧺",
+};

@@ -27,7 +27,7 @@ import {
   type Recipe,
   type MenuDay,
 } from "./actions";
-import { INGREDIENT_CATEGORIES, WEEK_DAYS, RECIPE_TAGS } from "@/lib/constants";
+import { INGREDIENT_CATEGORIES, WEEK_DAYS, RECIPE_TAGS, CATEGORY_ICONS } from "@/lib/constants";
 
 type View =
   | "choice"
@@ -1082,7 +1082,10 @@ export default function Home() {
                 if (itemsInCategory.length === 0) return null;
                 return (
                   <div key={category ?? "sans-categorie"} className="mb-4">
-                    <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-text-muted">
+                    <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-text-muted">
+                      <span className="text-sm">
+                        {category ? CATEGORY_ICONS[category] : "🧺"}
+                      </span>
                       {category ?? "Autres articles"}
                     </p>
                     <div className="flex flex-col gap-2">
@@ -1422,6 +1425,7 @@ export default function Home() {
                   >
                     <span className="text-text">{ingredient.name}</span>
                     <span className="text-text-muted">
+                      {CATEGORY_ICONS[ingredient.category] ?? "🧺"}{" "}
                       {ingredient.category}
                     </span>
                   </div>
@@ -1651,7 +1655,7 @@ export default function Home() {
                   >
                     {INGREDIENT_CATEGORIES.map((cat) => (
                       <option key={cat} value={cat}>
-                        {cat}
+                        {CATEGORY_ICONS[cat]} {cat}
                       </option>
                     ))}
                   </select>
