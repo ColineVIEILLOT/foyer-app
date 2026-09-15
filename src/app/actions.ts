@@ -2,6 +2,7 @@
 
 import bcrypt from "bcryptjs";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
+import { WEEK_DAYS } from "@/lib/constants";
 
 export type ActionResult =
   | { ok: true; householdId: string; householdName: string }
@@ -190,7 +191,29 @@ export type ShoppingItem = {
   name: string;
   quantity: string | null;
   checked: boolean;
+  category: string | null;
+  recipeName: string | null;
 };
+
+type ShoppingItemRow = {
+  id: string;
+  name: string;
+  quantity: string | null;
+  checked: boolean;
+  category: string | null;
+  recipe_name: string | null;
+};
+
+function mapShoppingItemRow(row: ShoppingItemRow): ShoppingItem {
+  return {
+    id: row.id,
+    name: row.name,
+    quantity: row.quantity,
+    checked: row.checked,
+    category: row.category,
+    recipeName: row.recipe_name,
+  };
+}
 
 export type ListShoppingItemsResult =
   | { ok: true; items: ShoppingItem[] }
@@ -209,7 +232,7 @@ export async function listShoppingItems(
 
   const { data, error } = await supabase
     .from("shopping_items")
-    .select("id, name, quantity, checked")
+    .select("id, name, quantity, checked, category, recipe_name")
     .eq("household_id", householdId)
     .order("created_at", { ascending: true });
 
@@ -217,7 +240,7 @@ export async function listShoppingItems(
     return { ok: false, error: "Impossible de charger la liste." };
   }
 
-  return { ok: true, items: data ?? [] };
+  return { ok: true, items: (data ?? []).map(mapShoppingItemRow) };
 }
 
 export async function addShoppingItem(
@@ -237,14 +260,14 @@ export async function addShoppingItem(
   const { data: inserted, error } = await supabase
     .from("shopping_items")
     .insert({ household_id: householdId, name, quantity })
-    .select("id, name, quantity, checked")
+    .select("id, name, quantity, checked, category, recipe_name")
     .single();
 
   if (error || !inserted) {
     return { ok: false, error: "Une erreur est survenue, réessayez." };
   }
 
-  return { ok: true, item: inserted };
+  return { ok: true, item: mapShoppingItemRow(inserted) };
 }
 
 export async function toggleShoppingItem(
@@ -309,6 +332,7 @@ export type Recipe = {
   prepTimeMinutes: number | null;
   cookTimeMinutes: number | null;
   photoUrl: string | null;
+  steps: string | null;
 };
 
 type RecipeRow = {
@@ -318,6 +342,7 @@ type RecipeRow = {
   prep_time_minutes: number | null;
   cook_time_minutes: number | null;
   photo_url: string | null;
+  steps: string | null;
 };
 
 function mapRecipeRow(row: RecipeRow): Recipe {
@@ -328,6 +353,7 @@ function mapRecipeRow(row: RecipeRow): Recipe {
     prepTimeMinutes: row.prep_time_minutes,
     cookTimeMinutes: row.cook_time_minutes,
     photoUrl: row.photo_url,
+    steps: row.steps,
   };
 }
 
@@ -347,7 +373,7 @@ export async function listRecipes(
   const { data, error } = await supabase
     .from("recipes")
     .select(
-      "id, name, ingredients, prep_time_minutes, cook_time_minutes, photo_url",
+      "id, name, ingredients, prep_time_minutes, cook_time_minutes, photo_url, steps",
     )
     .eq("household_id", householdId)
     .order("created_at", { ascending: true });
@@ -375,6 +401,8 @@ export async function createRecipe(
   const prepTimeMinutes = parseOptionalInt(formData.get("recipe-prep-time"));
   const cookTimeMinutes = parseOptionalInt(formData.get("recipe-cook-time"));
   const photo = formData.get("recipe-photo") as File | null;
+  const steps =
+    (formData.get("recipe-steps") as string | null)?.trim() || null;
 
   let ingredients: Ingredient[] = [];
   try {
@@ -419,9 +447,10 @@ export async function createRecipe(
       prep_time_minutes: prepTimeMinutes,
       cook_time_minutes: cookTimeMinutes,
       photo_url: photoUrl,
+      steps,
     })
     .select(
-      "id, name, ingredients, prep_time_minutes, cook_time_minutes, photo_url",
+      "id, name, ingredients, prep_time_minutes, cook_time_minutes, photo_url, steps",
     )
     .single();
 
@@ -452,7 +481,7 @@ export async function addRecipeToShoppingList(
 
   const { data: recipe, error: fetchError } = await supabase
     .from("recipes")
-    .select("ingredients")
+    .select("name, ingredients")
     .eq("id", recipeId)
     .maybeSingle();
 
@@ -465,7 +494,139 @@ export async function addRecipeToShoppingList(
     name: ingredient.name,
     quantity: null,
     checked: false,
+    category: ingredient.category || "Autre",
+    recipe_name: recipe.name,
   }));
+
+  if (rows.length === 0) return { ok: true };
+
+  const { error: insertError } = await supabase
+    .from("shopping_items")
+    .insert(rows);
+
+  if (insertError) {
+    return { ok: false, error: "Une erreur est survenue, réessayez." };
+  }
+
+  return { ok: true };
+}
+
+export type MenuDay = {
+  day: string;
+  recipeId: string | null;
+  recipeName: string | null;
+};
+
+export type ListMenuResult =
+  | { ok: true; menu: MenuDay[] }
+  | { ok: false; error: string };
+
+export async function listWeeklyMenu(
+  householdId: string,
+): Promise<ListMenuResult> {
+  const supabase = getSupabaseServerClient();
+
+  const { data, error } = await supabase
+    .from("menu_entries")
+    .select("day, recipe_id, recipes(name)")
+    .eq("household_id", householdId);
+
+  if (error) {
+    return { ok: false, error: "Impossible de charger le menu." };
+  }
+
+  const byDay = new Map(
+    (data ?? []).map((row) => [
+      row.day,
+      {
+        recipeId: row.recipe_id as string | null,
+        recipeName:
+          (row.recipes as unknown as { name: string } | null)?.name ?? null,
+      },
+    ]),
+  );
+
+  const menu: MenuDay[] = WEEK_DAYS.map((day) => ({
+    day,
+    recipeId: byDay.get(day)?.recipeId ?? null,
+    recipeName: byDay.get(day)?.recipeName ?? null,
+  }));
+
+  return { ok: true, menu };
+}
+
+export async function setMenuDay(
+  householdId: string,
+  day: string,
+  recipeId: string | null,
+): Promise<SimpleResult> {
+  const supabase = getSupabaseServerClient();
+
+  if (recipeId === null) {
+    const { error } = await supabase
+      .from("menu_entries")
+      .delete()
+      .eq("household_id", householdId)
+      .eq("day", day);
+    if (error) return { ok: false, error: "Une erreur est survenue, réessayez." };
+    return { ok: true };
+  }
+
+  const { error } = await supabase
+    .from("menu_entries")
+    .upsert(
+      { household_id: householdId, day, recipe_id: recipeId },
+      { onConflict: "household_id,day" },
+    );
+
+  if (error) {
+    return { ok: false, error: "Une erreur est survenue, réessayez." };
+  }
+
+  return { ok: true };
+}
+
+export async function addWeeklyMenuToShoppingList(
+  householdId: string,
+): Promise<SimpleResult> {
+  const supabase = getSupabaseServerClient();
+
+  const { data: entries, error } = await supabase
+    .from("menu_entries")
+    .select("recipe_id, recipes(name, ingredients)")
+    .eq("household_id", householdId)
+    .not("recipe_id", "is", null);
+
+  if (error) {
+    return { ok: false, error: "Une erreur est survenue, réessayez." };
+  }
+
+  const rows: {
+    household_id: string;
+    name: string;
+    quantity: null;
+    checked: false;
+    category: string;
+    recipe_name: string;
+  }[] = [];
+
+  for (const entry of entries ?? []) {
+    const recipe = entry.recipes as unknown as {
+      name: string;
+      ingredients: Ingredient[];
+    } | null;
+    if (!recipe) continue;
+    for (const ingredient of recipe.ingredients ?? []) {
+      rows.push({
+        household_id: householdId,
+        name: ingredient.name,
+        quantity: null,
+        checked: false,
+        category: ingredient.category || "Autre",
+        recipe_name: recipe.name,
+      });
+    }
+  }
 
   if (rows.length === 0) return { ok: true };
 

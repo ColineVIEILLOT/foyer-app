@@ -17,12 +17,16 @@ import {
   createRecipe,
   deleteRecipe,
   addRecipeToShoppingList,
+  listWeeklyMenu,
+  setMenuDay,
+  addWeeklyMenuToShoppingList,
   type Household,
   type Profile,
   type ShoppingItem,
   type Recipe,
+  type MenuDay,
 } from "./actions";
-import { INGREDIENT_CATEGORIES } from "@/lib/constants";
+import { INGREDIENT_CATEGORIES, WEEK_DAYS } from "@/lib/constants";
 
 type View =
   | "choice"
@@ -34,7 +38,8 @@ type View =
   | "home"
   | "courses"
   | "recipes"
-  | "new-recipe";
+  | "new-recipe"
+  | "weekly-menu";
 
 type Weather = {
   temperature: number;
@@ -385,6 +390,10 @@ export default function Home() {
     { name: string; category: string }[]
   >([{ name: "", category: INGREDIENT_CATEGORIES[0] }]);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  const [weeklyMenu, setWeeklyMenu] = useState<MenuDay[]>(
+    WEEK_DAYS.map((day) => ({ day, recipeId: null, recipeName: null })),
+  );
+  const [menuAdded, setMenuAdded] = useState(false);
   const [weather, setWeather] = useState<Weather | null>(null);
   const [weatherStatus, setWeatherStatus] = useState<
     "idle" | "loaded" | "error"
@@ -501,6 +510,19 @@ export default function Home() {
     listRecipes(householdId).then((result) => {
       if (!cancelled && result.ok) {
         setRecipes(result.recipes);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [view, householdId]);
+
+  useEffect(() => {
+    if (view !== "weekly-menu" || !householdId) return;
+    let cancelled = false;
+    listWeeklyMenu(householdId).then((result) => {
+      if (!cancelled && result.ok) {
+        setWeeklyMenu(result.menu);
       }
     });
     return () => {
@@ -652,6 +674,30 @@ export default function Home() {
     }
   }
 
+  async function handleSetMenuDay(day: string, recipeId: string | null) {
+    if (!householdId) return;
+    const recipe = recipeId ? recipes.find((r) => r.id === recipeId) : null;
+    setWeeklyMenu((prev) =>
+      prev.map((d) =>
+        d.day === day
+          ? { day, recipeId, recipeName: recipe?.name ?? null }
+          : d,
+      ),
+    );
+    await setMenuDay(householdId, day, recipeId);
+  }
+
+  async function handleAddMenuToList() {
+    if (!householdId) return;
+    const result = await addWeeklyMenuToShoppingList(householdId);
+    if (result.ok) {
+      setMenuAdded(true);
+      setTimeout(() => setMenuAdded(false), 2000);
+      const refreshed = await listShoppingItems(householdId);
+      if (refreshed.ok) setShoppingItems(refreshed.items);
+    }
+  }
+
   function backToChoice() {
     setError(null);
     setView("choice");
@@ -661,7 +707,8 @@ export default function Home() {
     view === "home" ||
     view === "courses" ||
     view === "recipes" ||
-    view === "new-recipe";
+    view === "new-recipe" ||
+    view === "weekly-menu";
 
   return (
     <>
@@ -948,65 +995,91 @@ export default function Home() {
             </p>
           ) : (
             <>
-              <div className="flex flex-col gap-2">
-              {shoppingItems.map((item) => (
-                <div
-                  key={item.id}
-                  className="flex items-center gap-3 rounded-xl border border-border bg-surface px-4 py-3"
-                >
-                  <button
-                    onClick={() => handleToggleItem(item)}
-                    aria-label={item.checked ? "Décocher" : "Cocher"}
-                    className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 transition-colors"
-                    style={{
-                      borderColor: item.checked
-                        ? "var(--pink)"
-                        : "var(--border)",
-                      backgroundColor: item.checked
-                        ? "var(--pink)"
-                        : "transparent",
-                    }}
-                  >
-                    {item.checked && (
-                      <svg viewBox="0 0 24 24" fill="none" className="h-3 w-3">
-                        <path
-                          d="M5 12.5 10 17 19 7"
-                          stroke="var(--surface)"
-                          strokeWidth="2.5"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        />
-                      </svg>
-                    )}
-                  </button>
-                  <span
-                    className={`flex-1 text-[15px] ${
-                      item.checked
-                        ? "text-text-muted line-through"
-                        : "text-text"
-                    }`}
-                  >
-                    {item.name}
-                  </span>
-                  {item.quantity && (
-                    <span className="text-sm text-text-muted">
-                      {item.quantity}
-                    </span>
-                  )}
-                  <button
-                    onClick={() => handleDeleteItem(item)}
-                    aria-label="Supprimer"
-                    className="text-text-muted transition-colors hover:text-danger"
-                  >
-                    ×
-                  </button>
-                </div>
-              ))}
-              </div>
+              {[...INGREDIENT_CATEGORIES, null].map((category) => {
+                const itemsInCategory = shoppingItems.filter((item) =>
+                  category === null
+                    ? !item.category
+                    : item.category === category,
+                );
+                if (itemsInCategory.length === 0) return null;
+                return (
+                  <div key={category ?? "sans-categorie"} className="mb-4">
+                    <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-text-muted">
+                      {category ?? "Autres articles"}
+                    </p>
+                    <div className="flex flex-col gap-2">
+                      {itemsInCategory.map((item) => (
+                        <div
+                          key={item.id}
+                          className="flex items-center gap-3 rounded-xl border border-border bg-surface px-4 py-3"
+                        >
+                          <button
+                            onClick={() => handleToggleItem(item)}
+                            aria-label={item.checked ? "Décocher" : "Cocher"}
+                            className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 transition-colors"
+                            style={{
+                              borderColor: item.checked
+                                ? "var(--pink)"
+                                : "var(--border)",
+                              backgroundColor: item.checked
+                                ? "var(--pink)"
+                                : "transparent",
+                            }}
+                          >
+                            {item.checked && (
+                              <svg
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                className="h-3 w-3"
+                              >
+                                <path
+                                  d="M5 12.5 10 17 19 7"
+                                  stroke="var(--surface)"
+                                  strokeWidth="2.5"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                />
+                              </svg>
+                            )}
+                          </button>
+                          <div className="flex-1">
+                            <p
+                              className={`text-[15px] ${
+                                item.checked
+                                  ? "text-text-muted line-through"
+                                  : "text-text"
+                              }`}
+                            >
+                              {item.name}
+                            </p>
+                            {item.recipeName && (
+                              <p className="text-xs text-text-muted">
+                                Pour {item.recipeName}
+                              </p>
+                            )}
+                          </div>
+                          {item.quantity && (
+                            <span className="text-sm text-text-muted">
+                              {item.quantity}
+                            </span>
+                          )}
+                          <button
+                            onClick={() => handleDeleteItem(item)}
+                            aria-label="Supprimer"
+                            className="text-text-muted transition-colors hover:text-danger"
+                          >
+                            ×
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
               {shoppingItems.some((i) => i.checked) && (
                 <button
                   onClick={handleClearChecked}
-                  className="mt-4 w-full rounded-xl border border-dashed border-border px-5 py-3 text-[15px] font-semibold text-text-muted transition-colors hover:border-accent hover:text-text"
+                  className="mt-2 w-full rounded-xl border border-dashed border-border px-5 py-3 text-[15px] font-semibold text-text-muted transition-colors hover:border-accent hover:text-text"
                 >
                   Vider les articles cochés
                 </button>
@@ -1040,6 +1113,24 @@ export default function Home() {
           <h1 className="mb-4 font-display text-2xl font-bold text-text">
             Recettes
           </h1>
+
+          <button
+            onClick={() => setView("weekly-menu")}
+            className="mb-4 flex w-full items-center gap-3 rounded-2xl border border-border bg-surface px-5 py-4 text-left transition-colors hover:border-accent"
+          >
+            <span
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full"
+              style={{
+                backgroundColor: "color-mix(in srgb, var(--calendar) 18%, transparent)",
+                color: "var(--calendar)",
+              }}
+            >
+              <IconCalendar />
+            </span>
+            <span className="flex-1 text-[15px] font-semibold text-text">
+              Menu de la semaine
+            </span>
+          </button>
 
           {recipes.length > 0 && (
             <div className="mb-4 flex gap-2 overflow-x-auto pb-1">
@@ -1118,6 +1209,16 @@ export default function Home() {
                     <p className="mb-3 text-sm text-text-muted">
                       {recipe.ingredients.map((i) => i.name).join(" · ")}
                     </p>
+                    {recipe.steps && (
+                      <details className="mb-3">
+                        <summary className="cursor-pointer text-sm font-semibold text-accent">
+                          Voir les étapes
+                        </summary>
+                        <p className="mt-2 whitespace-pre-line text-sm text-text-muted">
+                          {recipe.steps}
+                        </p>
+                      </details>
+                    )}
                     <button
                       onClick={() => handleAddRecipeToList(recipe)}
                       className="w-full rounded-xl border border-border px-4 py-2.5 text-sm font-semibold text-text transition-colors hover:border-accent"
@@ -1265,6 +1366,21 @@ export default function Home() {
               </button>
             </div>
 
+            <div className="flex flex-col gap-1.5">
+              <FieldLabel htmlFor="recipe-steps">
+                Étapes de préparation (optionnel)
+              </FieldLabel>
+              <textarea
+                id="recipe-steps"
+                name="recipe-steps"
+                rows={5}
+                placeholder={
+                  "Faire bouillir l'eau et cuire les pâtes.\nCouper les tomates et la mozzarella.\nMélanger le tout avec le basilic."
+                }
+                className="w-full rounded-xl border border-border bg-surface-2 px-4 py-3 text-[16px] text-text placeholder:text-text-muted/60 outline-none transition-colors focus:border-accent"
+              />
+            </div>
+
             <ErrorText message={error} />
             <button
               type="submit"
@@ -1274,6 +1390,58 @@ export default function Home() {
               {pending ? "Création…" : "Créer la recette"}
             </button>
           </form>
+        </div>
+      ) : view === "weekly-menu" ? (
+        <div className="w-full max-w-[380px]">
+          <div className="mb-6 flex items-center justify-between">
+            <button
+              onClick={() => setView("recipes")}
+              className="text-sm text-text-muted transition-colors hover:text-text"
+            >
+              ← Retour
+            </button>
+          </div>
+          <h1 className="mb-5 font-display text-2xl font-bold text-text">
+            Menu de la semaine
+          </h1>
+
+          <div className="flex flex-col gap-2">
+            {weeklyMenu.map(({ day, recipeId }) => (
+              <div
+                key={day}
+                className="flex items-center gap-3 rounded-xl border border-border bg-surface px-4 py-3"
+              >
+                <span className="w-24 shrink-0 text-[15px] font-semibold text-text">
+                  {day}
+                </span>
+                <select
+                  value={recipeId ?? ""}
+                  onChange={(e) =>
+                    handleSetMenuDay(day, e.target.value || null)
+                  }
+                  className="min-w-0 flex-1 rounded-lg border border-border bg-surface-2 px-2 py-2 text-[14px] text-text outline-none transition-colors focus:border-accent"
+                >
+                  <option value="">Aucune recette</option>
+                  {recipes.map((recipe) => (
+                    <option key={recipe.id} value={recipe.id}>
+                      {recipe.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ))}
+          </div>
+
+          {weeklyMenu.some((d) => d.recipeId) && (
+            <button
+              onClick={handleAddMenuToList}
+              className="mt-5 w-full rounded-xl bg-accent px-5 py-3.5 text-[15px] font-semibold text-surface transition-colors hover:bg-accent-soft"
+            >
+              {menuAdded
+                ? "Ajouté à la liste ✓"
+                : "Ajouter tous les ingrédients de la semaine à la liste"}
+            </button>
+          )}
         </div>
       ) : (
         <div className="w-full max-w-[380px]">

@@ -7,3 +7,13 @@ export const INGREDIENT_CATEGORIES = [
   "Épicerie",
   "Autre",
 ] as const;
+
+export const WEEK_DAYS = [
+  "Lundi",
+  "Mardi",
+  "Mercredi",
+  "Jeudi",
+  "Vendredi",
+  "Samedi",
+  "Dimanche",
+] as const;
