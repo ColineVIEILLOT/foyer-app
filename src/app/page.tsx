@@ -26,7 +26,7 @@ import {
   type Recipe,
   type MenuDay,
 } from "./actions";
-import { INGREDIENT_CATEGORIES, WEEK_DAYS } from "@/lib/constants";
+import { INGREDIENT_CATEGORIES, WEEK_DAYS, RECIPE_TAGS } from "@/lib/constants";
 
 type View =
   | "choice"
@@ -392,6 +392,7 @@ export default function Home() {
     { name: string; category: string }[]
   >([{ name: "", category: INGREDIENT_CATEGORIES[0] }]);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [weeklyMenu, setWeeklyMenu] = useState<MenuDay[]>(
     WEEK_DAYS.map((day) => ({ day, recipeId: null, recipeName: null })),
   );
@@ -641,12 +642,14 @@ export default function Home() {
     setPending(true);
     const formData = new FormData(e.currentTarget);
     formData.set("recipe-ingredients-json", JSON.stringify(cleanIngredients));
+    selectedTags.forEach((tag) => formData.append("recipe-tags", tag));
     const result = await createRecipe(householdId, formData);
     setPending(false);
     if (result.ok) {
       setRecipes((prev) => [...prev, result.recipe]);
       setIngredientRows([{ name: "", category: INGREDIENT_CATEGORIES[0] }]);
       setPhotoPreview(null);
+      setSelectedTags([]);
       setView("recipes");
     } else {
       setError(result.error);
@@ -1134,6 +1137,7 @@ export default function Home() {
                   { name: "", category: INGREDIENT_CATEGORIES[0] },
                 ]);
                 setPhotoPreview(null);
+                setSelectedTags([]);
                 setView("new-recipe");
               }}
               className="rounded-xl bg-accent px-4 py-2 text-sm font-semibold text-surface transition-colors hover:bg-accent-soft"
@@ -1174,20 +1178,16 @@ export default function Home() {
             </div>
           </div>
 
-          {recipes.length > 1 && (
-            <div className="mb-5">
-              <p className="mb-2 text-[15px] font-semibold text-text">
-                Suggestions rapides
-              </p>
-              <div className="flex gap-3 overflow-x-auto pb-1">
-                {[...recipes]
-                  .sort(
-                    (a, b) =>
-                      (a.prepTimeMinutes ?? 0) +
-                      (a.cookTimeMinutes ?? 0) -
-                      ((b.prepTimeMinutes ?? 0) + (b.cookTimeMinutes ?? 0)),
-                  )
-                  .map((recipe) => {
+          {RECIPE_TAGS.map((tag) => {
+            const tagged = recipes.filter((r) => r.tags.includes(tag));
+            if (tagged.length === 0) return null;
+            return (
+              <div key={tag} className="mb-5">
+                <p className="mb-2 text-[15px] font-semibold text-text">
+                  {tag}
+                </p>
+                <div className="flex gap-3 overflow-x-auto pb-1">
+                  {tagged.map((recipe) => {
                     const total =
                       (recipe.prepTimeMinutes ?? 0) +
                       (recipe.cookTimeMinutes ?? 0);
@@ -1222,9 +1222,10 @@ export default function Home() {
                       </button>
                     );
                   })}
+                </div>
               </div>
-            </div>
-          )}
+            );
+          })}
 
           {recipes.length > 0 && (
             <div className="mb-4 flex gap-2 overflow-x-auto pb-1">
@@ -1343,6 +1344,23 @@ export default function Home() {
               <h1 className="font-display text-xl font-bold text-text">
                 {selectedRecipe.name}
               </h1>
+              {selectedRecipe.tags.length > 0 && (
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {selectedRecipe.tags.map((tag) => (
+                    <span
+                      key={tag}
+                      className="rounded-full px-2.5 py-1 text-xs font-medium"
+                      style={{
+                        backgroundColor:
+                          "color-mix(in srgb, var(--accent) 15%, transparent)",
+                        color: "var(--accent)",
+                      }}
+                    >
+                      {tag}
+                    </span>
+                  ))}
+                </div>
+              )}
               {(selectedRecipe.prepTimeMinutes ||
                 selectedRecipe.cookTimeMinutes) && (
                 <div className="mt-1 flex gap-3 text-sm text-text-muted">
@@ -1447,6 +1465,38 @@ export default function Home() {
             <div className="flex flex-col gap-1.5">
               <FieldLabel htmlFor="recipe-name">Nom de la recette</FieldLabel>
               <TextField id="recipe-name" placeholder="Pâtes tomate mozzarella" />
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <FieldLabel htmlFor="recipe-tags">Type de recette</FieldLabel>
+              <div className="flex flex-wrap gap-2">
+                {RECIPE_TAGS.map((tag) => {
+                  const active = selectedTags.includes(tag);
+                  return (
+                    <button
+                      key={tag}
+                      type="button"
+                      onClick={() =>
+                        setSelectedTags((prev) =>
+                          active
+                            ? prev.filter((t) => t !== tag)
+                            : [...prev, tag],
+                        )
+                      }
+                      className="rounded-full border px-3 py-1.5 text-xs font-medium transition-colors"
+                      style={{
+                        borderColor: active ? "var(--accent)" : "var(--border)",
+                        backgroundColor: active
+                          ? "color-mix(in srgb, var(--accent) 15%, transparent)"
+                          : "transparent",
+                        color: active ? "var(--accent)" : "var(--text-muted)",
+                      }}
+                    >
+                      {tag}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
 
             <div className="flex gap-3">

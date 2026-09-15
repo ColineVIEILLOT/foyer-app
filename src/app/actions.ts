@@ -333,6 +333,7 @@ export type Recipe = {
   cookTimeMinutes: number | null;
   photoUrl: string | null;
   steps: string | null;
+  tags: string[];
 };
 
 type RecipeRow = {
@@ -343,6 +344,7 @@ type RecipeRow = {
   cook_time_minutes: number | null;
   photo_url: string | null;
   steps: string | null;
+  tags: string[] | null;
 };
 
 function mapRecipeRow(row: RecipeRow): Recipe {
@@ -354,6 +356,7 @@ function mapRecipeRow(row: RecipeRow): Recipe {
     cookTimeMinutes: row.cook_time_minutes,
     photoUrl: row.photo_url,
     steps: row.steps,
+    tags: row.tags ?? [],
   };
 }
 
@@ -374,7 +377,7 @@ export async function listRecipes(
     const { data, error } = await supabase
       .from("recipes")
       .select(
-        "id, name, ingredients, prep_time_minutes, cook_time_minutes, photo_url, steps",
+        "id, name, ingredients, prep_time_minutes, cook_time_minutes, photo_url, steps, tags",
       )
       .eq("household_id", householdId)
       .order("created_at", { ascending: true });
@@ -410,6 +413,7 @@ export async function createRecipe(
   const photo = formData.get("recipe-photo") as File | null;
   const steps =
     (formData.get("recipe-steps") as string | null)?.trim() || null;
+  const tags = formData.getAll("recipe-tags") as string[];
 
   let ingredients: Ingredient[] = [];
   try {
@@ -455,9 +459,10 @@ export async function createRecipe(
       cook_time_minutes: cookTimeMinutes,
       photo_url: photoUrl,
       steps,
+      tags,
     })
     .select(
-      "id, name, ingredients, prep_time_minutes, cook_time_minutes, photo_url, steps",
+      "id, name, ingredients, prep_time_minutes, cook_time_minutes, photo_url, steps, tags",
     )
     .single();
 

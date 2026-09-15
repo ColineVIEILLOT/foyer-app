@@ -17,3 +17,13 @@ export const WEEK_DAYS = [
   "Samedi",
   "Dimanche",
 ] as const;
+
+export const RECIPE_TAGS = [
+  "Rapide",
+  "Healthy",
+  "Plaisir",
+  "Économique",
+  "Végétarien",
+  "En famille",
+  "Batch cooking",
+] as const;
