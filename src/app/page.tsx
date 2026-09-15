@@ -236,6 +236,8 @@ const DASHBOARD_CARDS = [
   { title: "Calendrier", subtitle: "Bientôt disponible", color: "calendar", Icon: IconCalendar },
 ] as const;
 
+const AVATAR_COLORS = ["pink", "calendar", "accent", "sage"] as const;
+
 function LogoMark() {
   return (
     <Image
@@ -390,7 +392,7 @@ export default function Home() {
   }, [view]);
 
   useEffect(() => {
-    if (view !== "profiles" || !householdId) return;
+    if ((view !== "profiles" && view !== "home") || !householdId) return;
     let cancelled = false;
     listProfiles(householdId).then((result) => {
       if (!cancelled && result.ok) {
@@ -532,6 +534,48 @@ export default function Home() {
             />
           </div>
 
+          <div className="mb-6 flex items-center gap-3 overflow-x-auto pb-1">
+            {profiles.map((profile, i) => {
+              const avatarColor = AVATAR_COLORS[i % AVATAR_COLORS.length];
+              const isActive = profile.name === activeProfile;
+              return (
+                <button
+                  key={profile.id}
+                  onClick={() => selectProfile(profile)}
+                  className="flex shrink-0 flex-col items-center gap-1"
+                >
+                  <span
+                    className="flex h-12 w-12 items-center justify-center rounded-full text-[14px] font-semibold transition-all"
+                    style={{
+                      backgroundColor: `color-mix(in srgb, var(--${avatarColor}) 22%, transparent)`,
+                      color: `var(--${avatarColor})`,
+                      boxShadow: isActive
+                        ? `0 0 0 2px var(--${avatarColor})`
+                        : "none",
+                    }}
+                  >
+                    {initials(profile.name)}
+                  </span>
+                  <span className="text-[11px] text-text-muted">
+                    {profile.name}
+                  </span>
+                </button>
+              );
+            })}
+            <button
+              onClick={() => {
+                setError(null);
+                setView("new-profile");
+              }}
+              className="flex shrink-0 flex-col items-center gap-1"
+            >
+              <span className="flex h-12 w-12 items-center justify-center rounded-full border border-dashed border-border text-text-muted">
+                +
+              </span>
+              <span className="text-[11px] text-text-muted">Ajouter</span>
+            </button>
+          </div>
+
           <div className="mb-4 rounded-2xl border border-border bg-surface px-5 py-4">
             {weatherStatus === "loaded" && weather ? (
               <>
@@ -596,22 +640,72 @@ export default function Home() {
           </div>
 
           <div className="flex flex-col gap-3">
-            {DASHBOARD_CARDS.map(({ title, subtitle, color, Icon }) => {
-              const isCourses = title === "Courses";
-              const remaining = shoppingItems.filter((i) => !i.checked).length;
-              const badge = isCourses
-                ? remaining === 0
-                  ? "Liste vide"
-                  : `${remaining} article${remaining > 1 ? "s" : ""}`
-                : subtitle;
-              return (
-                <button
-                  key={title}
-                  onClick={() => {
-                    if (isCourses) setView("courses");
+            <button
+              onClick={() => setView("courses")}
+              className="rounded-2xl border border-border px-5 py-4 text-left transition-colors hover:border-accent"
+              style={{
+                backgroundColor: "color-mix(in srgb, var(--pink) 7%, var(--surface))",
+              }}
+            >
+              <div className="mb-3 flex items-center gap-3">
+                <span
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full"
+                  style={{
+                    backgroundColor: "color-mix(in srgb, var(--pink) 18%, transparent)",
+                    color: "var(--pink)",
                   }}
-                  disabled={!isCourses}
-                  className="flex items-center gap-3 rounded-2xl border border-border bg-surface px-5 py-4 text-left transition-colors enabled:hover:border-accent disabled:cursor-default"
+                >
+                  <IconBasket />
+                </span>
+                <span className="flex-1 text-[15px] font-semibold text-text">
+                  Courses
+                </span>
+                <span className="text-sm text-text-muted">
+                  {shoppingItems.filter((i) => !i.checked).length} article
+                  {shoppingItems.filter((i) => !i.checked).length > 1 ? "s" : ""}
+                </span>
+              </div>
+              {shoppingItems.length === 0 ? (
+                <p className="text-sm text-text-muted">
+                  Liste vide — ajoute ton premier article.
+                </p>
+              ) : (
+                <div className="flex flex-col gap-1.5">
+                  {shoppingItems.slice(0, 4).map((item) => (
+                    <div key={item.id} className="flex items-center gap-2">
+                      <span
+                        className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2"
+                        style={{
+                          borderColor: item.checked ? "var(--pink)" : "var(--border)",
+                          backgroundColor: item.checked ? "var(--pink)" : "transparent",
+                        }}
+                      />
+                      <span
+                        className={`text-sm ${
+                          item.checked
+                            ? "text-text-muted line-through"
+                            : "text-text"
+                        }`}
+                      >
+                        {item.name}
+                      </span>
+                    </div>
+                  ))}
+                  {shoppingItems.length > 4 && (
+                    <p className="mt-0.5 text-xs text-text-muted">
+                      + {shoppingItems.length - 4} autre
+                      {shoppingItems.length - 4 > 1 ? "s" : ""}
+                    </p>
+                  )}
+                </div>
+              )}
+            </button>
+
+            {DASHBOARD_CARDS.filter((c) => c.title !== "Courses").map(
+              ({ title, subtitle, color, Icon }) => (
+                <div
+                  key={title}
+                  className="flex items-center gap-3 rounded-2xl border border-border bg-surface px-5 py-4"
                 >
                   <span
                     className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full"
@@ -626,11 +720,11 @@ export default function Home() {
                     {title}
                   </span>
                   <span className="rounded-full bg-surface-2 px-2.5 py-1 text-xs font-medium text-text-muted">
-                    {badge}
+                    {subtitle}
                   </span>
-                </button>
-              );
-            })}
+                </div>
+              ),
+            )}
           </div>
         </div>
       ) : view === "courses" ? (
