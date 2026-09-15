@@ -292,3 +292,114 @@ export async function clearCheckedItems(
 
   return { ok: true };
 }
+
+export type Recipe = { id: string; name: string; ingredients: string[] };
+
+export type ListRecipesResult =
+  | { ok: true; recipes: Recipe[] }
+  | { ok: false; error: string };
+
+export type RecipeActionResult =
+  | { ok: true; recipe: Recipe }
+  | { ok: false; error: string };
+
+export async function listRecipes(
+  householdId: string,
+): Promise<ListRecipesResult> {
+  const supabase = getSupabaseServerClient();
+
+  const { data, error } = await supabase
+    .from("recipes")
+    .select("id, name, ingredients")
+    .eq("household_id", householdId)
+    .order("created_at", { ascending: true });
+
+  if (error) {
+    return { ok: false, error: "Impossible de charger les recettes." };
+  }
+
+  return { ok: true, recipes: data ?? [] };
+}
+
+export async function createRecipe(
+  householdId: string,
+  formData: FormData,
+): Promise<RecipeActionResult> {
+  const name = (formData.get("recipe-name") as string | null)?.trim() ?? "";
+  const rawIngredients =
+    (formData.get("recipe-ingredients") as string | null) ?? "";
+
+  const ingredients = rawIngredients
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
+
+  if (!name) {
+    return { ok: false, error: "Entrez un nom de recette." };
+  }
+  if (ingredients.length === 0) {
+    return { ok: false, error: "Ajoute au moins un ingrédient." };
+  }
+
+  const supabase = getSupabaseServerClient();
+
+  const { data: inserted, error } = await supabase
+    .from("recipes")
+    .insert({ household_id: householdId, name, ingredients })
+    .select("id, name, ingredients")
+    .single();
+
+  if (error || !inserted) {
+    return { ok: false, error: "Une erreur est survenue, réessayez." };
+  }
+
+  return { ok: true, recipe: inserted };
+}
+
+export async function deleteRecipe(recipeId: string): Promise<SimpleResult> {
+  const supabase = getSupabaseServerClient();
+
+  const { error } = await supabase.from("recipes").delete().eq("id", recipeId);
+
+  if (error) {
+    return { ok: false, error: "Une erreur est survenue, réessayez." };
+  }
+
+  return { ok: true };
+}
+
+export async function addRecipeToShoppingList(
+  householdId: string,
+  recipeId: string,
+): Promise<SimpleResult> {
+  const supabase = getSupabaseServerClient();
+
+  const { data: recipe, error: fetchError } = await supabase
+    .from("recipes")
+    .select("ingredients")
+    .eq("id", recipeId)
+    .maybeSingle();
+
+  if (fetchError || !recipe) {
+    return { ok: false, error: "Recette introuvable." };
+  }
+
+  const rows = (recipe.ingredients as string[]).map((name) => ({
+    household_id: householdId,
+    name,
+    quantity: null,
+    checked: false,
+  }));
+
+  if (rows.length === 0) return { ok: true };
+
+  const { error: insertError } = await supabase
+    .from("shopping_items")
+    .insert(rows);
+
+  if (insertError) {
+    return { ok: false, error: "Une erreur est survenue, réessayez." };
+  }
+
+  return { ok: true };
+}

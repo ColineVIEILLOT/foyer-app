@@ -13,9 +13,14 @@ import {
   toggleShoppingItem,
   deleteShoppingItem,
   clearCheckedItems,
+  listRecipes,
+  createRecipe,
+  deleteRecipe,
+  addRecipeToShoppingList,
   type Household,
   type Profile,
   type ShoppingItem,
+  type Recipe,
 } from "./actions";
 
 type View =
@@ -26,7 +31,9 @@ type View =
   | "profiles"
   | "new-profile"
   | "home"
-  | "courses";
+  | "courses"
+  | "recipes"
+  | "new-recipe";
 
 type Weather = {
   temperature: number;
@@ -250,8 +257,28 @@ function IconHome() {
   );
 }
 
+function IconBook() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5" aria-hidden>
+      <path
+        d="M4 5.5c0-.6.4-1 1-1h6.5v15H5a1 1 0 0 1-1-1v-13Z"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M20 5.5c0-.6-.4-1-1-1h-6.5v15H19a1 1 0 0 0 1-1v-13Z"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 const DASHBOARD_CARDS = [
   { title: "Courses", subtitle: "Bientôt disponible", color: "pink", Icon: IconBasket },
+  { title: "Recettes", subtitle: "Bientôt disponible", color: "sage", Icon: IconBook },
   { title: "Budget", subtitle: "Bientôt disponible", color: "accent", Icon: IconWallet },
   { title: "Calendrier", subtitle: "Bientôt disponible", color: "calendar", Icon: IconCalendar },
 ] as const;
@@ -261,6 +288,7 @@ const AVATAR_COLORS = ["pink", "calendar", "accent", "sage"] as const;
 const BOTTOM_NAV = [
   { key: "home", label: "Accueil", color: "accent", Icon: IconHome },
   { key: "courses", label: "Courses", color: "pink", Icon: IconBasket },
+  { key: "recipes", label: "Recettes", color: "sage", Icon: IconBook },
   { key: "budget", label: "Budget", color: "accent", Icon: IconWallet },
   { key: "calendrier", label: "Calendrier", color: "calendar", Icon: IconCalendar },
 ] as const;
@@ -346,6 +374,8 @@ export default function Home() {
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [activeProfile, setActiveProfile] = useState<string | null>(null);
   const [shoppingItems, setShoppingItems] = useState<ShoppingItem[]>([]);
+  const [recipes, setRecipes] = useState<Recipe[]>([]);
+  const [addedRecipeId, setAddedRecipeId] = useState<string | null>(null);
   const [weather, setWeather] = useState<Weather | null>(null);
   const [weatherStatus, setWeatherStatus] = useState<
     "idle" | "loaded" | "error"
@@ -444,6 +474,19 @@ export default function Home() {
     };
   }, [view, householdId]);
 
+  useEffect(() => {
+    if ((view !== "recipes" && view !== "home") || !householdId) return;
+    let cancelled = false;
+    listRecipes(householdId).then((result) => {
+      if (!cancelled && result.ok) {
+        setRecipes(result.recipes);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [view, householdId]);
+
   async function handleCreate(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError(null);
@@ -530,12 +573,47 @@ export default function Home() {
     await clearCheckedItems(householdId);
   }
 
+  async function handleAddRecipe(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!householdId) return;
+    setError(null);
+    setPending(true);
+    const result = await createRecipe(householdId, new FormData(e.currentTarget));
+    setPending(false);
+    if (result.ok) {
+      setRecipes((prev) => [...prev, result.recipe]);
+      setView("recipes");
+    } else {
+      setError(result.error);
+    }
+  }
+
+  async function handleDeleteRecipe(recipe: Recipe) {
+    setRecipes((prev) => prev.filter((r) => r.id !== recipe.id));
+    await deleteRecipe(recipe.id);
+  }
+
+  async function handleAddRecipeToList(recipe: Recipe) {
+    if (!householdId) return;
+    const result = await addRecipeToShoppingList(householdId, recipe.id);
+    if (result.ok) {
+      setAddedRecipeId(recipe.id);
+      setTimeout(() => setAddedRecipeId(null), 2000);
+      const refreshed = await listShoppingItems(householdId);
+      if (refreshed.ok) setShoppingItems(refreshed.items);
+    }
+  }
+
   function backToChoice() {
     setError(null);
     setView("choice");
   }
 
-  const showBottomNav = view === "home" || view === "courses";
+  const showBottomNav =
+    view === "home" ||
+    view === "courses" ||
+    view === "recipes" ||
+    view === "new-recipe";
 
   return (
     <>
@@ -721,28 +799,38 @@ export default function Home() {
             </button>
 
             {DASHBOARD_CARDS.filter((c) => c.title !== "Courses").map(
-              ({ title, subtitle, color, Icon }) => (
-                <div
-                  key={title}
-                  className="flex items-center gap-3 rounded-2xl border border-border bg-surface px-5 py-4"
-                >
-                  <span
-                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full"
-                    style={{
-                      backgroundColor: `color-mix(in srgb, var(--${color}) 18%, transparent)`,
-                      color: `var(--${color})`,
+              ({ title, subtitle, color, Icon }) => {
+                const isRecipes = title === "Recettes";
+                const badge = isRecipes
+                  ? `${recipes.length} recette${recipes.length > 1 ? "s" : ""}`
+                  : subtitle;
+                return (
+                  <button
+                    key={title}
+                    onClick={() => {
+                      if (isRecipes) setView("recipes");
                     }}
+                    disabled={!isRecipes}
+                    className="flex items-center gap-3 rounded-2xl border border-border bg-surface px-5 py-4 text-left transition-colors enabled:hover:border-accent disabled:cursor-default"
                   >
-                    <Icon />
-                  </span>
-                  <span className="flex-1 text-[15px] font-semibold text-text">
-                    {title}
-                  </span>
-                  <span className="rounded-full bg-surface-2 px-2.5 py-1 text-xs font-medium text-text-muted">
-                    {subtitle}
-                  </span>
-                </div>
-              ),
+                    <span
+                      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full"
+                      style={{
+                        backgroundColor: `color-mix(in srgb, var(--${color}) 18%, transparent)`,
+                        color: `var(--${color})`,
+                      }}
+                    >
+                      <Icon />
+                    </span>
+                    <span className="flex-1 text-[15px] font-semibold text-text">
+                      {title}
+                    </span>
+                    <span className="rounded-full bg-surface-2 px-2.5 py-1 text-xs font-medium text-text-muted">
+                      {badge}
+                    </span>
+                  </button>
+                );
+              },
             )}
           </div>
 
@@ -877,6 +965,111 @@ export default function Home() {
               )}
             </>
           )}
+        </div>
+      ) : view === "recipes" ? (
+        <div className="w-full max-w-[380px]">
+          <div className="mb-6 flex items-center justify-between">
+            <button
+              onClick={() => setView("home")}
+              className="text-sm text-text-muted transition-colors hover:text-text"
+            >
+              ← Retour
+            </button>
+            <button
+              onClick={() => {
+                setError(null);
+                setView("new-recipe");
+              }}
+              className="rounded-xl bg-accent px-4 py-2 text-sm font-semibold text-surface transition-colors hover:bg-accent-soft"
+            >
+              + Nouvelle recette
+            </button>
+          </div>
+          <h1 className="mb-5 font-display text-2xl font-bold text-text">
+            Recettes
+          </h1>
+
+          {recipes.length === 0 ? (
+            <p className="text-[15px] text-text-muted">
+              Aucune recette pour l&apos;instant — crée la première.
+            </p>
+          ) : (
+            <div className="flex flex-col gap-3">
+              {recipes.map((recipe) => (
+                <div
+                  key={recipe.id}
+                  className="rounded-2xl border border-border bg-surface px-5 py-4"
+                >
+                  <div className="mb-2 flex items-center justify-between">
+                    <p className="text-[15px] font-semibold text-text">
+                      {recipe.name}
+                    </p>
+                    <button
+                      onClick={() => handleDeleteRecipe(recipe)}
+                      aria-label="Supprimer"
+                      className="text-text-muted transition-colors hover:text-danger"
+                    >
+                      ×
+                    </button>
+                  </div>
+                  <p className="mb-3 text-sm text-text-muted">
+                    {recipe.ingredients.join(" · ")}
+                  </p>
+                  <button
+                    onClick={() => handleAddRecipeToList(recipe)}
+                    className="w-full rounded-xl border border-border px-4 py-2.5 text-sm font-semibold text-text transition-colors hover:border-accent"
+                  >
+                    {addedRecipeId === recipe.id
+                      ? "Ajouté à la liste ✓"
+                      : "Ajouter à la liste de courses"}
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      ) : view === "new-recipe" ? (
+        <div className="w-full max-w-[380px]">
+          <form onSubmit={handleAddRecipe} className="flex flex-col gap-4">
+            <button
+              type="button"
+              onClick={() => {
+                setError(null);
+                setView("recipes");
+              }}
+              className="mb-1 self-start text-sm text-text-muted transition-colors hover:text-text"
+            >
+              ← Retour
+            </button>
+            <h1 className="font-display text-2xl font-bold text-text">
+              Nouvelle recette
+            </h1>
+            <div className="flex flex-col gap-1.5">
+              <FieldLabel htmlFor="recipe-name">Nom de la recette</FieldLabel>
+              <TextField id="recipe-name" placeholder="Pâtes tomate mozzarella" />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <FieldLabel htmlFor="recipe-ingredients">
+                Ingrédients (un par ligne)
+              </FieldLabel>
+              <textarea
+                id="recipe-ingredients"
+                name="recipe-ingredients"
+                required
+                rows={6}
+                placeholder={"Pâtes\nTomates\nMozzarella\nBasilic"}
+                className="w-full rounded-xl border border-border bg-surface-2 px-4 py-3 text-[16px] text-text placeholder:text-text-muted/60 outline-none transition-colors focus:border-accent"
+              />
+            </div>
+            <ErrorText message={error} />
+            <button
+              type="submit"
+              disabled={pending}
+              className="mt-2 w-full rounded-xl bg-accent px-5 py-3.5 text-[15px] font-semibold text-surface transition-colors hover:bg-accent-soft disabled:opacity-60"
+            >
+              {pending ? "Création…" : "Créer la recette"}
+            </button>
+          </form>
         </div>
       ) : (
         <div className="w-full max-w-[380px]">
@@ -1077,7 +1270,8 @@ export default function Home() {
             {BOTTOM_NAV.map(({ key, label, color, Icon }) => {
               const isActive =
                 view === key || (key === "home" && view === "home");
-              const isEnabled = key === "home" || key === "courses";
+              const isEnabled =
+                key === "home" || key === "courses" || key === "recipes";
               return (
                 <button
                   key={key}
@@ -1085,6 +1279,7 @@ export default function Home() {
                   onClick={() => {
                     if (key === "home") setView("home");
                     if (key === "courses") setView("courses");
+                    if (key === "recipes") setView("recipes");
                   }}
                   className="flex flex-col items-center gap-1 px-3 py-1 disabled:opacity-40"
                 >
