@@ -21,11 +21,15 @@ import {
   listWeeklyMenu,
   setMenuDay,
   addWeeklyMenuToShoppingList,
+  listEvents,
+  createEvent,
+  deleteEvent,
   type Household,
   type Profile,
   type ShoppingItem,
   type Recipe,
   type MenuDay,
+  type CalendarEvent,
 } from "./actions";
 import { INGREDIENT_CATEGORIES, WEEK_DAYS, RECIPE_TAGS, CATEGORY_ICONS } from "@/lib/constants";
 
@@ -41,7 +45,9 @@ type View =
   | "recipes"
   | "new-recipe"
   | "recipe-detail"
-  | "weekly-menu";
+  | "weekly-menu"
+  | "calendar"
+  | "new-event";
 
 type Weather = {
   temperature: number;
@@ -121,6 +127,34 @@ function dayOfYear(date: Date) {
   const start = new Date(date.getFullYear(), 0, 0);
   const diff = date.getTime() - start.getTime();
   return Math.floor(diff / 86400000);
+}
+
+function toDateKey(date: Date) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+function getMonthGrid(year: number, month: number) {
+  const firstOfMonth = new Date(year, month, 1);
+  const startWeekday = (firstOfMonth.getDay() + 6) % 7; // Lundi = 0
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const cells: (Date | null)[] = [];
+  for (let i = 0; i < startWeekday; i++) cells.push(null);
+  for (let d = 1; d <= daysInMonth; d++) cells.push(new Date(year, month, d));
+  while (cells.length % 7 !== 0) cells.push(null);
+  return cells;
+}
+
+const MONTH_LABEL_FORMATTER = new Intl.DateTimeFormat("fr-FR", {
+  month: "long",
+  year: "numeric",
+});
+
+function formatEventTime(time: string | null) {
+  if (!time) return null;
+  return time.slice(0, 5);
 }
 
 function getDayProgress(sunriseISO: string, sunsetISO: string) {
@@ -404,6 +438,13 @@ export default function Home() {
   );
   const [menuAdded, setMenuAdded] = useState(false);
   const [selectedRecipe, setSelectedRecipe] = useState<Recipe | null>(null);
+  const [events, setEvents] = useState<CalendarEvent[]>([]);
+  const [eventsError, setEventsError] = useState<string | null>(null);
+  const [viewedMonth, setViewedMonth] = useState(() => {
+    const now = new Date();
+    return new Date(now.getFullYear(), now.getMonth(), 1);
+  });
+  const [selectedDay, setSelectedDay] = useState<string | null>(null);
   const [menuPickerOpen, setMenuPickerOpen] = useState(false);
   const [menuPickedDay, setMenuPickedDay] = useState<string | null>(null);
   const [weather, setWeather] = useState<Weather | null>(null);
@@ -543,6 +584,27 @@ export default function Home() {
     listWeeklyMenu(householdId).then((result) => {
       if (!cancelled && result.ok) {
         setWeeklyMenu(result.menu);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [view, householdId]);
+
+  useEffect(() => {
+    if (
+      (view !== "calendar" && view !== "new-event" && view !== "home") ||
+      !householdId
+    )
+      return;
+    let cancelled = false;
+    listEvents(householdId).then((result) => {
+      if (cancelled) return;
+      if (result.ok) {
+        setEventsError(null);
+        setEvents(result.events);
+      } else {
+        setEventsError(result.error);
       }
     });
     return () => {
@@ -775,6 +837,35 @@ export default function Home() {
     }
   }
 
+  async function handleAddEvent(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!householdId) return;
+    setError(null);
+    setPending(true);
+    const result = await createEvent(householdId, new FormData(e.currentTarget));
+    setPending(false);
+    if (result.ok) {
+      setEvents((prev) =>
+        [...prev, result.event].sort((a, b) => a.date.localeCompare(b.date)),
+      );
+      setView("calendar");
+    } else {
+      setError(result.error);
+    }
+  }
+
+  async function handleDeleteEvent(event: CalendarEvent) {
+    if (!window.confirm(`Supprimer "${event.title}" ?`)) return;
+    setEvents((prev) => prev.filter((e) => e.id !== event.id));
+    await deleteEvent(event.id);
+  }
+
+  function openNewEventForm(dateKey?: string) {
+    setError(null);
+    setSelectedDay(dateKey ?? selectedDay ?? toDateKey(new Date()));
+    setView("new-event");
+  }
+
   function backToChoice() {
     setError(null);
     setView("choice");
@@ -786,7 +877,9 @@ export default function Home() {
     view === "recipes" ||
     view === "new-recipe" ||
     view === "recipe-detail" ||
-    view === "weekly-menu";
+    view === "weekly-menu" ||
+    view === "calendar" ||
+    view === "new-event";
 
   return (
     <>
@@ -906,10 +999,27 @@ export default function Home() {
             <p className="mb-1 text-[15px] font-semibold text-text">
               Aujourd&apos;hui
             </p>
-            <p className="text-sm text-text-muted">
-              Rien de prévu pour l&apos;instant — l&apos;agenda du foyer
-              arrive avec l&apos;onglet Calendrier.
-            </p>
+            {events.filter((ev) => ev.date === toDateKey(new Date())).length ===
+            0 ? (
+              <p className="text-sm text-text-muted">
+                Rien de prévu pour l&apos;instant.
+              </p>
+            ) : (
+              <div className="flex flex-col gap-1">
+                {events
+                  .filter((ev) => ev.date === toDateKey(new Date()))
+                  .map((ev) => (
+                    <p key={ev.id} className="text-sm text-text">
+                      {formatEventTime(ev.time) && (
+                        <span className="text-text-muted">
+                          {formatEventTime(ev.time)}{" "}
+                        </span>
+                      )}
+                      {ev.title}
+                    </p>
+                  ))}
+              </div>
+            )}
           </div>
 
           <div className="flex flex-col gap-3">
@@ -974,16 +1084,25 @@ export default function Home() {
             {DASHBOARD_CARDS.filter((c) => c.title !== "Courses").map(
               ({ title, subtitle, color, Icon }) => {
                 const isRecipes = title === "Recettes";
+                const isCalendar = title === "Calendrier";
+                const upcoming = events.filter(
+                  (ev) => ev.date >= toDateKey(new Date()),
+                ).length;
                 const badge = isRecipes
                   ? `${recipes.length} recette${recipes.length > 1 ? "s" : ""}`
-                  : subtitle;
+                  : isCalendar
+                    ? upcoming === 0
+                      ? "Rien à venir"
+                      : `${upcoming} à venir`
+                    : subtitle;
                 return (
                   <button
                     key={title}
                     onClick={() => {
                       if (isRecipes) setView("recipes");
+                      if (isCalendar) setView("calendar");
                     }}
-                    disabled={!isRecipes}
+                    disabled={!isRecipes && !isCalendar}
                     className="flex items-center gap-3 rounded-2xl border border-border bg-surface px-5 py-4 text-left transition-colors enabled:hover:border-accent disabled:cursor-default"
                   >
                     <span
@@ -1771,6 +1890,216 @@ export default function Home() {
             </button>
           )}
         </div>
+      ) : view === "calendar" ? (
+        <div className="w-full max-w-[380px]">
+          <div className="mb-6 flex items-center justify-between">
+            <button
+              onClick={() => setView("home")}
+              className="text-sm text-text-muted transition-colors hover:text-text"
+            >
+              ← Retour
+            </button>
+            <button
+              onClick={() => openNewEventForm()}
+              className="rounded-xl bg-accent px-4 py-2 text-sm font-semibold text-surface transition-colors hover:bg-accent-soft"
+            >
+              + Rendez-vous
+            </button>
+          </div>
+
+          <div className="mb-4 flex items-center justify-between">
+            <button
+              onClick={() =>
+                setViewedMonth(
+                  (m) => new Date(m.getFullYear(), m.getMonth() - 1, 1),
+                )
+              }
+              aria-label="Mois précédent"
+              className="rounded-full border border-border px-3 py-1.5 text-text-muted transition-colors hover:border-accent hover:text-text"
+            >
+              ‹
+            </button>
+            <p className="font-display text-lg font-bold capitalize text-text">
+              {MONTH_LABEL_FORMATTER.format(viewedMonth)}
+            </p>
+            <button
+              onClick={() =>
+                setViewedMonth(
+                  (m) => new Date(m.getFullYear(), m.getMonth() + 1, 1),
+                )
+              }
+              aria-label="Mois suivant"
+              className="rounded-full border border-border px-3 py-1.5 text-text-muted transition-colors hover:border-accent hover:text-text"
+            >
+              ›
+            </button>
+          </div>
+
+          {eventsError ? (
+            <p className="mb-4 text-[15px] text-danger">
+              Erreur : {eventsError}
+            </p>
+          ) : (
+            <>
+              <div className="mb-1 grid grid-cols-7 gap-1 text-center text-[11px] font-semibold text-text-muted">
+                {["L", "M", "M", "J", "V", "S", "D"].map((d, i) => (
+                  <span key={i}>{d}</span>
+                ))}
+              </div>
+              <div className="mb-5 grid grid-cols-7 gap-1">
+                {getMonthGrid(
+                  viewedMonth.getFullYear(),
+                  viewedMonth.getMonth(),
+                ).map((date, i) => {
+                  if (!date) return <div key={i} />;
+                  const key = toDateKey(date);
+                  const isToday = key === toDateKey(new Date());
+                  const hasEvents = events.some((ev) => ev.date === key);
+                  const isSelected = key === selectedDay;
+                  return (
+                    <button
+                      key={i}
+                      onClick={() => setSelectedDay(key)}
+                      className="flex flex-col items-center gap-0.5 rounded-xl py-2 text-[13px] transition-colors"
+                      style={{
+                        backgroundColor: isSelected
+                          ? "color-mix(in srgb, var(--accent) 18%, transparent)"
+                          : "transparent",
+                        color: isToday ? "var(--accent)" : "var(--text)",
+                        fontWeight: isToday ? 700 : 400,
+                      }}
+                    >
+                      {date.getDate()}
+                      <span
+                        className="h-1 w-1 rounded-full"
+                        style={{
+                          backgroundColor: hasEvents
+                            ? "var(--accent)"
+                            : "transparent",
+                        }}
+                      />
+                    </button>
+                  );
+                })}
+              </div>
+
+              {selectedDay && (
+                <div>
+                  <p className="mb-2 text-[15px] font-semibold text-text">
+                    {new Date(selectedDay + "T00:00:00").toLocaleDateString(
+                      "fr-FR",
+                      { weekday: "long", day: "numeric", month: "long" },
+                    )}
+                  </p>
+                  {events.filter((ev) => ev.date === selectedDay).length ===
+                  0 ? (
+                    <p className="mb-3 text-sm text-text-muted">
+                      Rien de prévu ce jour-là.
+                    </p>
+                  ) : (
+                    <div className="mb-3 flex flex-col gap-2">
+                      {events
+                        .filter((ev) => ev.date === selectedDay)
+                        .map((ev) => (
+                          <div
+                            key={ev.id}
+                            className="flex items-center gap-3 rounded-xl border border-border bg-surface px-4 py-3"
+                          >
+                            <div className="flex-1">
+                              <p className="text-[15px] text-text">
+                                {ev.title}
+                              </p>
+                              {(formatEventTime(ev.time) || ev.notes) && (
+                                <p className="text-xs text-text-muted">
+                                  {[formatEventTime(ev.time), ev.notes]
+                                    .filter(Boolean)
+                                    .join(" · ")}
+                                </p>
+                              )}
+                            </div>
+                            <button
+                              onClick={() => handleDeleteEvent(ev)}
+                              aria-label="Supprimer"
+                              className="text-text-muted transition-colors hover:text-danger"
+                            >
+                              ×
+                            </button>
+                          </div>
+                        ))}
+                    </div>
+                  )}
+                  <button
+                    onClick={() => openNewEventForm(selectedDay)}
+                    className="w-full rounded-xl border border-dashed border-border px-5 py-3 text-[15px] font-semibold text-text-muted transition-colors hover:border-accent hover:text-text"
+                  >
+                    + Ajouter un rendez-vous ce jour-là
+                  </button>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      ) : view === "new-event" ? (
+        <div className="w-full max-w-[380px]">
+          <form onSubmit={handleAddEvent} className="flex flex-col gap-4">
+            <button
+              type="button"
+              onClick={() => {
+                setError(null);
+                setView("calendar");
+              }}
+              className="mb-1 self-start text-sm text-text-muted transition-colors hover:text-text"
+            >
+              ← Retour
+            </button>
+            <h1 className="font-display text-2xl font-bold text-text">
+              Nouveau rendez-vous
+            </h1>
+            <div className="flex flex-col gap-1.5">
+              <FieldLabel htmlFor="event-title">Titre</FieldLabel>
+              <TextField id="event-title" placeholder="Anniversaire Mamie" />
+            </div>
+            <div className="flex gap-3">
+              <div className="flex flex-1 flex-col gap-1.5">
+                <FieldLabel htmlFor="event-date">Date</FieldLabel>
+                <input
+                  id="event-date"
+                  name="event-date"
+                  type="date"
+                  required
+                  defaultValue={selectedDay ?? toDateKey(new Date())}
+                  className="w-full rounded-xl border border-border bg-surface-2 px-3 py-3 text-[15px] text-text outline-none transition-colors focus:border-accent"
+                />
+              </div>
+              <div className="flex flex-1 flex-col gap-1.5">
+                <FieldLabel htmlFor="event-time">Heure (optionnel)</FieldLabel>
+                <input
+                  id="event-time"
+                  name="event-time"
+                  type="time"
+                  className="w-full rounded-xl border border-border bg-surface-2 px-3 py-3 text-[15px] text-text outline-none transition-colors focus:border-accent"
+                />
+              </div>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <FieldLabel htmlFor="event-notes">Notes (optionnel)</FieldLabel>
+              <input
+                id="event-notes"
+                name="event-notes"
+                placeholder="Lieu, précisions…"
+                className="w-full rounded-xl border border-border bg-surface-2 px-4 py-3 text-[16px] text-text placeholder:text-text-muted/60 outline-none transition-colors focus:border-accent"
+              />
+            </div>
+            <ErrorText message={error} />
+            <button
+              type="submit"
+              disabled={pending}
+              className="mt-2 w-full rounded-xl bg-accent px-5 py-3.5 text-[15px] font-semibold text-surface transition-colors hover:bg-accent-soft disabled:opacity-60"
+            >
+              {pending ? "Création…" : "Créer le rendez-vous"}
+            </button>
+          </form>
+        </div>
       ) : (
         <div className="w-full max-w-[380px]">
           <div className="mb-8 flex flex-col items-center text-center">
@@ -1975,7 +2304,10 @@ export default function Home() {
               const isActive =
                 view === key || (key === "home" && view === "home");
               const isEnabled =
-                key === "home" || key === "courses" || key === "recipes";
+                key === "home" ||
+                key === "courses" ||
+                key === "recipes" ||
+                key === "calendrier";
               return (
                 <button
                   key={key}
@@ -1984,6 +2316,7 @@ export default function Home() {
                     if (key === "home") setView("home");
                     if (key === "courses") setView("courses");
                     if (key === "recipes") setView("recipes");
+                    if (key === "calendrier") setView("calendar");
                   }}
                   className="flex flex-col items-center gap-1 px-3 py-1 disabled:opacity-40"
                 >

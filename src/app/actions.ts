@@ -731,3 +731,112 @@ export async function addWeeklyMenuToShoppingList(
 
   return { ok: true };
 }
+
+export type CalendarEvent = {
+  id: string;
+  title: string;
+  date: string;
+  time: string | null;
+  notes: string | null;
+};
+
+type EventRow = {
+  id: string;
+  title: string;
+  event_date: string;
+  event_time: string | null;
+  notes: string | null;
+};
+
+function mapEventRow(row: EventRow): CalendarEvent {
+  return {
+    id: row.id,
+    title: row.title,
+    date: row.event_date,
+    time: row.event_time,
+    notes: row.notes,
+  };
+}
+
+export type ListEventsResult =
+  | { ok: true; events: CalendarEvent[] }
+  | { ok: false; error: string };
+
+export type EventActionResult =
+  | { ok: true; event: CalendarEvent }
+  | { ok: false; error: string };
+
+export async function listEvents(
+  householdId: string,
+): Promise<ListEventsResult> {
+  try {
+    const supabase = getSupabaseServerClient();
+
+    const { data, error } = await supabase
+      .from("events")
+      .select("id, title, event_date, event_time, notes")
+      .eq("household_id", householdId)
+      .order("event_date", { ascending: true });
+
+    if (error) {
+      return { ok: false, error: `Supabase: ${error.message}` };
+    }
+
+    return { ok: true, events: (data ?? []).map(mapEventRow) };
+  } catch (e) {
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "Erreur inconnue.",
+    };
+  }
+}
+
+export async function createEvent(
+  householdId: string,
+  formData: FormData,
+): Promise<EventActionResult> {
+  const title = (formData.get("event-title") as string | null)?.trim() ?? "";
+  const date = (formData.get("event-date") as string | null) ?? "";
+  const time = (formData.get("event-time") as string | null)?.trim() || null;
+  const notes =
+    (formData.get("event-notes") as string | null)?.trim() || null;
+
+  if (!title) {
+    return { ok: false, error: "Entrez un titre." };
+  }
+  if (!date) {
+    return { ok: false, error: "Choisis une date." };
+  }
+
+  const supabase = getSupabaseServerClient();
+
+  const { data: inserted, error } = await supabase
+    .from("events")
+    .insert({
+      household_id: householdId,
+      title,
+      event_date: date,
+      event_time: time,
+      notes,
+    })
+    .select("id, title, event_date, event_time, notes")
+    .single();
+
+  if (error || !inserted) {
+    return { ok: false, error: "Une erreur est survenue, réessayez." };
+  }
+
+  return { ok: true, event: mapEventRow(inserted) };
+}
+
+export async function deleteEvent(eventId: string): Promise<SimpleResult> {
+  const supabase = getSupabaseServerClient();
+
+  const { error } = await supabase.from("events").delete().eq("id", eventId);
+
+  if (error) {
+    return { ok: false, error: "Une erreur est survenue, réessayez." };
+  }
+
+  return { ok: true };
+}
