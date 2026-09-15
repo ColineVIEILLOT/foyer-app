@@ -371,6 +371,7 @@ export default function Home() {
   const [householdId, setHouseholdId] = useState<string | null>(null);
   const [householdName, setHouseholdName] = useState<string | null>(null);
   const [households, setHouseholds] = useState<Household[]>([]);
+  const [householdsError, setHouseholdsError] = useState<string | null>(null);
   const [joinTarget, setJoinTarget] = useState<Household | null>(null);
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [activeProfile, setActiveProfile] = useState<string | null>(null);
@@ -446,11 +447,23 @@ export default function Home() {
   useEffect(() => {
     if (view !== "join") return;
     let cancelled = false;
-    listHouseholds().then((result) => {
-      if (!cancelled && result.ok) {
-        setHouseholds(result.households);
-      }
-    });
+    listHouseholds()
+      .then((result) => {
+        if (cancelled) return;
+        if (result.ok) {
+          setHouseholdsError(null);
+          setHouseholds(result.households);
+        } else {
+          setHouseholdsError(result.error);
+        }
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) {
+          setHouseholdsError(
+            err instanceof Error ? err.message : "Erreur inconnue.",
+          );
+        }
+      });
     return () => {
       cancelled = true;
     };
@@ -1327,7 +1340,11 @@ export default function Home() {
                   ← Retour
                 </button>
                 <h2 className="font-display text-xl font-bold text-text">Rejoindre un foyer</h2>
-                {households.length === 0 ? (
+                {householdsError ? (
+                  <p className="text-[15px] text-danger">
+                    Erreur : {householdsError}
+                  </p>
+                ) : households.length === 0 ? (
                   <p className="text-[15px] text-text-muted">
                     Aucun foyer trouvé pour l&apos;instant.
                   </p>
