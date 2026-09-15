@@ -379,7 +379,7 @@ export default function Home() {
   const [recipes, setRecipes] = useState<Recipe[]>([]);
   const [addedRecipeId, setAddedRecipeId] = useState<string | null>(null);
   const [recipeSort, setRecipeSort] = useState<
-    "name" | "prep" | "cook" | "total"
+    "name" | "prep" | "cook" | "total" | "ingredients"
   >("name");
   const [ingredientRows, setIngredientRows] = useState<
     { name: string; category: string }[]
@@ -628,6 +628,8 @@ export default function Home() {
       const total = (r: Recipe) =>
         (r.prepTimeMinutes ?? 0) + (r.cookTimeMinutes ?? 0);
       list.sort((a, b) => total(a) - total(b));
+    } else if (recipeSort === "ingredients") {
+      list.sort((a, b) => a.ingredients.length - b.ingredients.length);
     } else {
       list.sort((a, b) => a.name.localeCompare(b.name));
     }
@@ -1047,6 +1049,7 @@ export default function Home() {
                   { key: "prep", label: "Préparation" },
                   { key: "cook", label: "Cuisson" },
                   { key: "total", label: "Temps total" },
+                  { key: "ingredients", label: "Nb d'ingrédients" },
                 ] as const
               ).map((opt) => (
                 <button
@@ -1108,6 +1111,10 @@ export default function Home() {
                         )}
                       </div>
                     )}
+                    <p className="mb-1 text-xs font-medium text-text-muted">
+                      {recipe.ingredients.length} ingrédient
+                      {recipe.ingredients.length > 1 ? "s" : ""}
+                    </p>
                     <p className="mb-3 text-sm text-text-muted">
                       {recipe.ingredients.map((i) => i.name).join(" · ")}
                     </p>
