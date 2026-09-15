@@ -368,21 +368,28 @@ export type RecipeActionResult =
 export async function listRecipes(
   householdId: string,
 ): Promise<ListRecipesResult> {
-  const supabase = getSupabaseServerClient();
+  try {
+    const supabase = getSupabaseServerClient();
 
-  const { data, error } = await supabase
-    .from("recipes")
-    .select(
-      "id, name, ingredients, prep_time_minutes, cook_time_minutes, photo_url, steps",
-    )
-    .eq("household_id", householdId)
-    .order("created_at", { ascending: true });
+    const { data, error } = await supabase
+      .from("recipes")
+      .select(
+        "id, name, ingredients, prep_time_minutes, cook_time_minutes, photo_url, steps",
+      )
+      .eq("household_id", householdId)
+      .order("created_at", { ascending: true });
 
-  if (error) {
-    return { ok: false, error: "Impossible de charger les recettes." };
+    if (error) {
+      return { ok: false, error: `Supabase: ${error.message}` };
+    }
+
+    return { ok: true, recipes: (data ?? []).map(mapRecipeRow) };
+  } catch (e) {
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "Erreur inconnue.",
+    };
   }
-
-  return { ok: true, recipes: (data ?? []).map(mapRecipeRow) };
 }
 
 function parseOptionalInt(value: FormDataEntryValue | null) {

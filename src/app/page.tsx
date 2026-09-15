@@ -39,6 +39,7 @@ type View =
   | "courses"
   | "recipes"
   | "new-recipe"
+  | "recipe-detail"
   | "weekly-menu";
 
 type Weather = {
@@ -382,6 +383,7 @@ export default function Home() {
   const [activeProfile, setActiveProfile] = useState<string | null>(null);
   const [shoppingItems, setShoppingItems] = useState<ShoppingItem[]>([]);
   const [recipes, setRecipes] = useState<Recipe[]>([]);
+  const [recipesError, setRecipesError] = useState<string | null>(null);
   const [addedRecipeId, setAddedRecipeId] = useState<string | null>(null);
   const [recipeSort, setRecipeSort] = useState<
     "name" | "prep" | "cook" | "total" | "ingredients"
@@ -394,6 +396,9 @@ export default function Home() {
     WEEK_DAYS.map((day) => ({ day, recipeId: null, recipeName: null })),
   );
   const [menuAdded, setMenuAdded] = useState(false);
+  const [selectedRecipe, setSelectedRecipe] = useState<Recipe | null>(null);
+  const [menuPickerOpen, setMenuPickerOpen] = useState(false);
+  const [menuPickedDay, setMenuPickedDay] = useState<string | null>(null);
   const [weather, setWeather] = useState<Weather | null>(null);
   const [weatherStatus, setWeatherStatus] = useState<
     "idle" | "loaded" | "error"
@@ -508,8 +513,12 @@ export default function Home() {
     if ((view !== "recipes" && view !== "home") || !householdId) return;
     let cancelled = false;
     listRecipes(householdId).then((result) => {
-      if (!cancelled && result.ok) {
+      if (cancelled) return;
+      if (result.ok) {
+        setRecipesError(null);
         setRecipes(result.recipes);
+      } else {
+        setRecipesError(result.error);
       }
     });
     return () => {
@@ -518,7 +527,11 @@ export default function Home() {
   }, [view, householdId]);
 
   useEffect(() => {
-    if (view !== "weekly-menu" || !householdId) return;
+    if (
+      (view !== "weekly-menu" && view !== "recipes") ||
+      !householdId
+    )
+      return;
     let cancelled = false;
     listWeeklyMenu(householdId).then((result) => {
       if (!cancelled && result.ok) {
@@ -659,6 +672,7 @@ export default function Home() {
   }
 
   async function handleDeleteRecipe(recipe: Recipe) {
+    if (!window.confirm(`Supprimer la recette "${recipe.name}" ?`)) return;
     setRecipes((prev) => prev.filter((r) => r.id !== recipe.id));
     await deleteRecipe(recipe.id);
   }
@@ -687,6 +701,22 @@ export default function Home() {
     await setMenuDay(householdId, day, recipeId);
   }
 
+  function openRecipeDetail(recipe: Recipe) {
+    setSelectedRecipe(recipe);
+    setMenuPickerOpen(false);
+    setMenuPickedDay(null);
+    setView("recipe-detail");
+  }
+
+  async function handlePickMenuDayForRecipe(recipe: Recipe, day: string) {
+    await handleSetMenuDay(day, recipe.id);
+    setMenuPickedDay(day);
+    setTimeout(() => {
+      setMenuPickedDay(null);
+      setMenuPickerOpen(false);
+    }, 1500);
+  }
+
   async function handleAddMenuToList() {
     if (!householdId) return;
     const result = await addWeeklyMenuToShoppingList(householdId);
@@ -708,6 +738,7 @@ export default function Home() {
     view === "courses" ||
     view === "recipes" ||
     view === "new-recipe" ||
+    view === "recipe-detail" ||
     view === "weekly-menu";
 
   return (
@@ -1114,23 +1145,86 @@ export default function Home() {
             Recettes
           </h1>
 
-          <button
-            onClick={() => setView("weekly-menu")}
-            className="mb-4 flex w-full items-center gap-3 rounded-2xl border border-border bg-surface px-5 py-4 text-left transition-colors hover:border-accent"
-          >
-            <span
-              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full"
-              style={{
-                backgroundColor: "color-mix(in srgb, var(--calendar) 18%, transparent)",
-                color: "var(--calendar)",
-              }}
-            >
-              <IconCalendar />
-            </span>
-            <span className="flex-1 text-[15px] font-semibold text-text">
-              Menu de la semaine
-            </span>
-          </button>
+          <div className="mb-5 rounded-2xl border border-border bg-surface p-4">
+            <div className="mb-2 flex items-center justify-between">
+              <p className="text-[15px] font-semibold text-text">
+                Menu de la semaine
+              </p>
+              <button
+                onClick={() => setView("weekly-menu")}
+                className="text-sm font-semibold text-accent"
+              >
+                Modifier
+              </button>
+            </div>
+            <div className="flex gap-2 overflow-x-auto pb-1">
+              {weeklyMenu.map(({ day, recipeName }) => (
+                <div
+                  key={day}
+                  className="flex w-20 shrink-0 flex-col items-center gap-1 rounded-xl border border-border px-2 py-2 text-center"
+                >
+                  <span className="text-[10px] font-semibold uppercase text-text-muted">
+                    {day.slice(0, 3)}
+                  </span>
+                  <span className="line-clamp-2 text-[11px] text-text">
+                    {recipeName ?? "—"}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {recipes.length > 1 && (
+            <div className="mb-5">
+              <p className="mb-2 text-[15px] font-semibold text-text">
+                Suggestions rapides
+              </p>
+              <div className="flex gap-3 overflow-x-auto pb-1">
+                {[...recipes]
+                  .sort(
+                    (a, b) =>
+                      (a.prepTimeMinutes ?? 0) +
+                      (a.cookTimeMinutes ?? 0) -
+                      ((b.prepTimeMinutes ?? 0) + (b.cookTimeMinutes ?? 0)),
+                  )
+                  .map((recipe) => {
+                    const total =
+                      (recipe.prepTimeMinutes ?? 0) +
+                      (recipe.cookTimeMinutes ?? 0);
+                    return (
+                      <button
+                        key={recipe.id}
+                        onClick={() => openRecipeDetail(recipe)}
+                        className="w-36 shrink-0 overflow-hidden rounded-2xl border border-border bg-surface text-left"
+                      >
+                        {recipe.photoUrl ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={recipe.photoUrl}
+                            alt={recipe.name}
+                            className="h-24 w-full object-cover"
+                          />
+                        ) : (
+                          <div className="flex h-24 w-full items-center justify-center bg-surface-2 text-text-muted">
+                            <IconBook />
+                          </div>
+                        )}
+                        <div className="px-3 py-2">
+                          <p className="truncate text-[13px] font-semibold text-text">
+                            {recipe.name}
+                          </p>
+                          {total > 0 && (
+                            <p className="text-[11px] text-text-muted">
+                              {total} min
+                            </p>
+                          )}
+                        </div>
+                      </button>
+                    );
+                  })}
+              </div>
+            </div>
+          )}
 
           {recipes.length > 0 && (
             <div className="mb-4 flex gap-2 overflow-x-auto pb-1">
@@ -1160,7 +1254,9 @@ export default function Home() {
             </div>
           )}
 
-          {recipes.length === 0 ? (
+          {recipesError ? (
+            <p className="text-[15px] text-danger">Erreur : {recipesError}</p>
+          ) : recipes.length === 0 ? (
             <p className="text-[15px] text-text-muted">
               Aucune recette pour l&apos;instant — crée la première.
             </p>
@@ -1171,67 +1267,165 @@ export default function Home() {
                   key={recipe.id}
                   className="overflow-hidden rounded-2xl border border-border bg-surface"
                 >
-                  {recipe.photoUrl && (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={recipe.photoUrl}
-                      alt={recipe.name}
-                      className="h-36 w-full object-cover"
-                    />
-                  )}
-                  <div className="px-5 py-4">
-                    <div className="mb-1 flex items-center justify-between">
+                  <button
+                    onClick={() => openRecipeDetail(recipe)}
+                    className="block w-full text-left"
+                  >
+                    {recipe.photoUrl && (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={recipe.photoUrl}
+                        alt={recipe.name}
+                        className="h-36 w-full object-cover"
+                      />
+                    )}
+                    <div className="px-5 pt-4">
                       <p className="text-[15px] font-semibold text-text">
                         {recipe.name}
                       </p>
-                      <button
-                        onClick={() => handleDeleteRecipe(recipe)}
-                        aria-label="Supprimer"
-                        className="text-text-muted transition-colors hover:text-danger"
-                      >
-                        ×
-                      </button>
+                      {(recipe.prepTimeMinutes || recipe.cookTimeMinutes) && (
+                        <div className="mt-1 flex gap-3 text-xs text-text-muted">
+                          {recipe.prepTimeMinutes != null && (
+                            <span>Prépa {recipe.prepTimeMinutes} min</span>
+                          )}
+                          {recipe.cookTimeMinutes != null && (
+                            <span>Cuisson {recipe.cookTimeMinutes} min</span>
+                          )}
+                        </div>
+                      )}
+                      <p className="mt-1 text-xs font-medium text-text-muted">
+                        {recipe.ingredients.length} ingrédient
+                        {recipe.ingredients.length > 1 ? "s" : ""}
+                      </p>
                     </div>
-                    {(recipe.prepTimeMinutes || recipe.cookTimeMinutes) && (
-                      <div className="mb-2 flex gap-3 text-xs text-text-muted">
-                        {recipe.prepTimeMinutes != null && (
-                          <span>Prépa {recipe.prepTimeMinutes} min</span>
-                        )}
-                        {recipe.cookTimeMinutes != null && (
-                          <span>Cuisson {recipe.cookTimeMinutes} min</span>
-                        )}
-                      </div>
-                    )}
-                    <p className="mb-1 text-xs font-medium text-text-muted">
-                      {recipe.ingredients.length} ingrédient
-                      {recipe.ingredients.length > 1 ? "s" : ""}
-                    </p>
-                    <p className="mb-3 text-sm text-text-muted">
-                      {recipe.ingredients.map((i) => i.name).join(" · ")}
-                    </p>
-                    {recipe.steps && (
-                      <details className="mb-3">
-                        <summary className="cursor-pointer text-sm font-semibold text-accent">
-                          Voir les étapes
-                        </summary>
-                        <p className="mt-2 whitespace-pre-line text-sm text-text-muted">
-                          {recipe.steps}
-                        </p>
-                      </details>
-                    )}
+                  </button>
+                  <div className="flex gap-2 px-5 pb-4 pt-3">
                     <button
                       onClick={() => handleAddRecipeToList(recipe)}
-                      className="w-full rounded-xl border border-border px-4 py-2.5 text-sm font-semibold text-text transition-colors hover:border-accent"
+                      className="flex-1 rounded-xl border border-border px-4 py-2.5 text-sm font-semibold text-text transition-colors hover:border-accent"
                     >
                       {addedRecipeId === recipe.id
-                        ? "Ajouté à la liste ✓"
-                        : "Ajouter à la liste de courses"}
+                        ? "Ajouté ✓"
+                        : "Ajouter aux courses"}
+                    </button>
+                    <button
+                      onClick={() => handleDeleteRecipe(recipe)}
+                      aria-label="Supprimer"
+                      className="rounded-xl border border-border px-3 text-text-muted transition-colors hover:border-danger hover:text-danger"
+                    >
+                      ×
                     </button>
                   </div>
                 </div>
               ))}
             </div>
           )}
+        </div>
+      ) : view === "recipe-detail" && selectedRecipe ? (
+        <div className="w-full max-w-[380px]">
+          <button
+            onClick={() => setView("recipes")}
+            className="mb-4 text-sm text-text-muted transition-colors hover:text-text"
+          >
+            ← Retour
+          </button>
+
+          <div className="overflow-hidden rounded-2xl border border-border bg-surface">
+            {selectedRecipe.photoUrl && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={selectedRecipe.photoUrl}
+                alt={selectedRecipe.name}
+                className="h-48 w-full object-cover"
+              />
+            )}
+            <div className="px-5 py-4">
+              <h1 className="font-display text-xl font-bold text-text">
+                {selectedRecipe.name}
+              </h1>
+              {(selectedRecipe.prepTimeMinutes ||
+                selectedRecipe.cookTimeMinutes) && (
+                <div className="mt-1 flex gap-3 text-sm text-text-muted">
+                  {selectedRecipe.prepTimeMinutes != null && (
+                    <span>Prépa {selectedRecipe.prepTimeMinutes} min</span>
+                  )}
+                  {selectedRecipe.cookTimeMinutes != null && (
+                    <span>Cuisson {selectedRecipe.cookTimeMinutes} min</span>
+                  )}
+                </div>
+              )}
+
+              <p className="mb-2 mt-4 text-[15px] font-semibold text-text">
+                Ingrédients ({selectedRecipe.ingredients.length})
+              </p>
+              <div className="mb-4 flex flex-col gap-1">
+                {selectedRecipe.ingredients.map((ingredient, i) => (
+                  <div
+                    key={i}
+                    className="flex items-center justify-between text-sm"
+                  >
+                    <span className="text-text">{ingredient.name}</span>
+                    <span className="text-text-muted">
+                      {ingredient.category}
+                    </span>
+                  </div>
+                ))}
+              </div>
+
+              {selectedRecipe.steps && (
+                <>
+                  <p className="mb-2 text-[15px] font-semibold text-text">
+                    Étapes
+                  </p>
+                  <p className="mb-4 whitespace-pre-line text-sm text-text-muted">
+                    {selectedRecipe.steps}
+                  </p>
+                </>
+              )}
+
+              <button
+                onClick={() => handleAddRecipeToList(selectedRecipe)}
+                className="mb-2 w-full rounded-xl bg-accent px-5 py-3 text-[15px] font-semibold text-surface transition-colors hover:bg-accent-soft"
+              >
+                {addedRecipeId === selectedRecipe.id
+                  ? "Ajouté à la liste ✓"
+                  : "Ajouter à la liste de courses"}
+              </button>
+
+              <button
+                onClick={() => setMenuPickerOpen((v) => !v)}
+                className="w-full rounded-xl border border-border px-5 py-3 text-[15px] font-semibold text-text transition-colors hover:border-accent"
+              >
+                + Ajouter au menu de la semaine
+              </button>
+
+              {menuPickerOpen && (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {WEEK_DAYS.map((day) => (
+                    <button
+                      key={day}
+                      onClick={() =>
+                        handlePickMenuDayForRecipe(selectedRecipe, day)
+                      }
+                      className="rounded-full border px-3 py-1.5 text-xs font-medium transition-colors"
+                      style={{
+                        borderColor:
+                          menuPickedDay === day
+                            ? "var(--accent)"
+                            : "var(--border)",
+                        color:
+                          menuPickedDay === day
+                            ? "var(--accent)"
+                            : "var(--text-muted)",
+                      }}
+                    >
+                      {menuPickedDay === day ? `${day} ✓` : day}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       ) : view === "new-recipe" ? (
         <div className="w-full max-w-[380px]">
