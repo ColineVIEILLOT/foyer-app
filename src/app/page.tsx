@@ -17,12 +17,12 @@ import {
   createRecipe,
   deleteRecipe,
   addRecipeToShoppingList,
-  INGREDIENT_CATEGORIES,
   type Household,
   type Profile,
   type ShoppingItem,
   type Recipe,
 } from "./actions";
+import { INGREDIENT_CATEGORIES } from "@/lib/constants";
 
 type View =
   | "choice"

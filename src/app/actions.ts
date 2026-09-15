@@ -302,16 +302,6 @@ export async function clearCheckedItems(
 
 export type Ingredient = { name: string; category: string };
 
-export const INGREDIENT_CATEGORIES = [
-  "Viande/Poisson",
-  "Légume",
-  "Fruit",
-  "Féculent",
-  "Produit laitier",
-  "Épicerie",
-  "Autre",
-] as const;
-
 export type Recipe = {
   id: string;
   name: string;
