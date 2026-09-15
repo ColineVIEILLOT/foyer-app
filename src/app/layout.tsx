@@ -22,6 +22,10 @@ export const metadata: Metadata = {
     statusBarStyle: "default",
     title: "Foyer",
   },
+  icons: {
+    icon: "/logo.png",
+    apple: "/logo.png",
+  },
 };
 
 export const viewport: Viewport = {

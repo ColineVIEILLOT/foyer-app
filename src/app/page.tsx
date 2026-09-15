@@ -811,9 +811,9 @@ export default function Home() {
             <Image
               src="/logo.png"
               alt="Home"
-              width={112}
-              height={112}
-              className="h-11 w-11 shrink-0"
+              width={140}
+              height={140}
+              className="h-16 w-16 shrink-0"
             />
           </div>
 
