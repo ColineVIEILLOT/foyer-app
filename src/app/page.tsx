@@ -813,7 +813,7 @@ export default function Home() {
               alt="Home"
               width={140}
               height={140}
-              className="h-16 w-16 shrink-0"
+              className="h-24 w-24 shrink-0"
             />
           </div>
 
