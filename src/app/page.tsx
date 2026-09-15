@@ -17,6 +17,7 @@ import {
   createRecipe,
   deleteRecipe,
   addRecipeToShoppingList,
+  INGREDIENT_CATEGORIES,
   type Household,
   type Profile,
   type ShoppingItem,
@@ -376,6 +377,13 @@ export default function Home() {
   const [shoppingItems, setShoppingItems] = useState<ShoppingItem[]>([]);
   const [recipes, setRecipes] = useState<Recipe[]>([]);
   const [addedRecipeId, setAddedRecipeId] = useState<string | null>(null);
+  const [recipeSort, setRecipeSort] = useState<
+    "name" | "prep" | "cook" | "total"
+  >("name");
+  const [ingredientRows, setIngredientRows] = useState<
+    { name: string; category: string }[]
+  >([{ name: "", category: INGREDIENT_CATEGORIES[0] }]);
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [weather, setWeather] = useState<Weather | null>(null);
   const [weatherStatus, setWeatherStatus] = useState<
     "idle" | "loaded" | "error"
@@ -577,15 +585,40 @@ export default function Home() {
     e.preventDefault();
     if (!householdId) return;
     setError(null);
+    const cleanIngredients = ingredientRows.filter((r) => r.name.trim());
+    if (cleanIngredients.length === 0) {
+      setError("Ajoute au moins un ingrédient.");
+      return;
+    }
     setPending(true);
-    const result = await createRecipe(householdId, new FormData(e.currentTarget));
+    const formData = new FormData(e.currentTarget);
+    formData.set("recipe-ingredients-json", JSON.stringify(cleanIngredients));
+    const result = await createRecipe(householdId, formData);
     setPending(false);
     if (result.ok) {
       setRecipes((prev) => [...prev, result.recipe]);
+      setIngredientRows([{ name: "", category: INGREDIENT_CATEGORIES[0] }]);
+      setPhotoPreview(null);
       setView("recipes");
     } else {
       setError(result.error);
     }
+  }
+
+  function sortedRecipes() {
+    const list = [...recipes];
+    if (recipeSort === "prep") {
+      list.sort((a, b) => (a.prepTimeMinutes ?? 999) - (b.prepTimeMinutes ?? 999));
+    } else if (recipeSort === "cook") {
+      list.sort((a, b) => (a.cookTimeMinutes ?? 999) - (b.cookTimeMinutes ?? 999));
+    } else if (recipeSort === "total") {
+      const total = (r: Recipe) =>
+        (r.prepTimeMinutes ?? 0) + (r.cookTimeMinutes ?? 0);
+      list.sort((a, b) => total(a) - total(b));
+    } else {
+      list.sort((a, b) => a.name.localeCompare(b.name));
+    }
+    return list;
   }
 
   async function handleDeleteRecipe(recipe: Recipe) {
@@ -978,6 +1011,10 @@ export default function Home() {
             <button
               onClick={() => {
                 setError(null);
+                setIngredientRows([
+                  { name: "", category: INGREDIENT_CATEGORIES[0] },
+                ]);
+                setPhotoPreview(null);
                 setView("new-recipe");
               }}
               className="rounded-xl bg-accent px-4 py-2 text-sm font-semibold text-surface transition-colors hover:bg-accent-soft"
@@ -985,9 +1022,36 @@ export default function Home() {
               + Nouvelle recette
             </button>
           </div>
-          <h1 className="mb-5 font-display text-2xl font-bold text-text">
+          <h1 className="mb-4 font-display text-2xl font-bold text-text">
             Recettes
           </h1>
+
+          {recipes.length > 0 && (
+            <div className="mb-4 flex gap-2 overflow-x-auto pb-1">
+              {(
+                [
+                  { key: "name", label: "Nom" },
+                  { key: "prep", label: "Préparation" },
+                  { key: "cook", label: "Cuisson" },
+                  { key: "total", label: "Temps total" },
+                ] as const
+              ).map((opt) => (
+                <button
+                  key={opt.key}
+                  onClick={() => setRecipeSort(opt.key)}
+                  className="shrink-0 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors"
+                  style={{
+                    borderColor:
+                      recipeSort === opt.key ? "var(--accent)" : "var(--border)",
+                    color:
+                      recipeSort === opt.key ? "var(--accent)" : "var(--text-muted)",
+                  }}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          )}
 
           {recipes.length === 0 ? (
             <p className="text-[15px] text-text-muted">
@@ -995,34 +1059,54 @@ export default function Home() {
             </p>
           ) : (
             <div className="flex flex-col gap-3">
-              {recipes.map((recipe) => (
+              {sortedRecipes().map((recipe) => (
                 <div
                   key={recipe.id}
-                  className="rounded-2xl border border-border bg-surface px-5 py-4"
+                  className="overflow-hidden rounded-2xl border border-border bg-surface"
                 >
-                  <div className="mb-2 flex items-center justify-between">
-                    <p className="text-[15px] font-semibold text-text">
-                      {recipe.name}
+                  {recipe.photoUrl && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={recipe.photoUrl}
+                      alt={recipe.name}
+                      className="h-36 w-full object-cover"
+                    />
+                  )}
+                  <div className="px-5 py-4">
+                    <div className="mb-1 flex items-center justify-between">
+                      <p className="text-[15px] font-semibold text-text">
+                        {recipe.name}
+                      </p>
+                      <button
+                        onClick={() => handleDeleteRecipe(recipe)}
+                        aria-label="Supprimer"
+                        className="text-text-muted transition-colors hover:text-danger"
+                      >
+                        ×
+                      </button>
+                    </div>
+                    {(recipe.prepTimeMinutes || recipe.cookTimeMinutes) && (
+                      <div className="mb-2 flex gap-3 text-xs text-text-muted">
+                        {recipe.prepTimeMinutes != null && (
+                          <span>Prépa {recipe.prepTimeMinutes} min</span>
+                        )}
+                        {recipe.cookTimeMinutes != null && (
+                          <span>Cuisson {recipe.cookTimeMinutes} min</span>
+                        )}
+                      </div>
+                    )}
+                    <p className="mb-3 text-sm text-text-muted">
+                      {recipe.ingredients.map((i) => i.name).join(" · ")}
                     </p>
                     <button
-                      onClick={() => handleDeleteRecipe(recipe)}
-                      aria-label="Supprimer"
-                      className="text-text-muted transition-colors hover:text-danger"
+                      onClick={() => handleAddRecipeToList(recipe)}
+                      className="w-full rounded-xl border border-border px-4 py-2.5 text-sm font-semibold text-text transition-colors hover:border-accent"
                     >
-                      ×
+                      {addedRecipeId === recipe.id
+                        ? "Ajouté à la liste ✓"
+                        : "Ajouter à la liste de courses"}
                     </button>
                   </div>
-                  <p className="mb-3 text-sm text-text-muted">
-                    {recipe.ingredients.join(" · ")}
-                  </p>
-                  <button
-                    onClick={() => handleAddRecipeToList(recipe)}
-                    className="w-full rounded-xl border border-border px-4 py-2.5 text-sm font-semibold text-text transition-colors hover:border-accent"
-                  >
-                    {addedRecipeId === recipe.id
-                      ? "Ajouté à la liste ✓"
-                      : "Ajouter à la liste de courses"}
-                  </button>
                 </div>
               ))}
             </div>
@@ -1044,23 +1128,123 @@ export default function Home() {
             <h1 className="font-display text-2xl font-bold text-text">
               Nouvelle recette
             </h1>
+
             <div className="flex flex-col gap-1.5">
               <FieldLabel htmlFor="recipe-name">Nom de la recette</FieldLabel>
               <TextField id="recipe-name" placeholder="Pâtes tomate mozzarella" />
             </div>
-            <div className="flex flex-col gap-1.5">
-              <FieldLabel htmlFor="recipe-ingredients">
-                Ingrédients (un par ligne)
-              </FieldLabel>
-              <textarea
-                id="recipe-ingredients"
-                name="recipe-ingredients"
-                required
-                rows={6}
-                placeholder={"Pâtes\nTomates\nMozzarella\nBasilic"}
-                className="w-full rounded-xl border border-border bg-surface-2 px-4 py-3 text-[16px] text-text placeholder:text-text-muted/60 outline-none transition-colors focus:border-accent"
-              />
+
+            <div className="flex gap-3">
+              <div className="flex flex-1 flex-col gap-1.5">
+                <FieldLabel htmlFor="recipe-prep-time">Préparation (min)</FieldLabel>
+                <input
+                  id="recipe-prep-time"
+                  name="recipe-prep-time"
+                  type="number"
+                  min={0}
+                  inputMode="numeric"
+                  placeholder="15"
+                  className="w-full rounded-xl border border-border bg-surface-2 px-4 py-3 text-[16px] text-text placeholder:text-text-muted/60 outline-none transition-colors focus:border-accent"
+                />
+              </div>
+              <div className="flex flex-1 flex-col gap-1.5">
+                <FieldLabel htmlFor="recipe-cook-time">Cuisson (min)</FieldLabel>
+                <input
+                  id="recipe-cook-time"
+                  name="recipe-cook-time"
+                  type="number"
+                  min={0}
+                  inputMode="numeric"
+                  placeholder="20"
+                  className="w-full rounded-xl border border-border bg-surface-2 px-4 py-3 text-[16px] text-text placeholder:text-text-muted/60 outline-none transition-colors focus:border-accent"
+                />
+              </div>
             </div>
+
+            <div className="flex flex-col gap-1.5">
+              <FieldLabel htmlFor="recipe-photo">Photo (optionnel)</FieldLabel>
+              <input
+                id="recipe-photo"
+                name="recipe-photo"
+                type="file"
+                accept="image/*"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) setPhotoPreview(URL.createObjectURL(file));
+                  else setPhotoPreview(null);
+                }}
+                className="w-full text-sm text-text-muted file:mr-3 file:rounded-xl file:border-0 file:bg-surface-2 file:px-3 file:py-2 file:text-sm file:font-medium file:text-text"
+              />
+              {photoPreview && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={photoPreview}
+                  alt=""
+                  className="mt-2 h-32 w-full rounded-xl object-cover"
+                />
+              )}
+            </div>
+
+            <div className="flex flex-col gap-2">
+              <FieldLabel htmlFor="ingredient-0">Ingrédients</FieldLabel>
+              {ingredientRows.map((row, i) => (
+                <div key={i} className="flex gap-2">
+                  <input
+                    id={`ingredient-${i}`}
+                    value={row.name}
+                    onChange={(e) => {
+                      const next = [...ingredientRows];
+                      next[i] = { ...next[i], name: e.target.value };
+                      setIngredientRows(next);
+                    }}
+                    placeholder="Tomates"
+                    className="min-w-0 flex-1 rounded-xl border border-border bg-surface-2 px-3 py-2.5 text-[15px] text-text placeholder:text-text-muted/60 outline-none transition-colors focus:border-accent"
+                  />
+                  <select
+                    value={row.category}
+                    onChange={(e) => {
+                      const next = [...ingredientRows];
+                      next[i] = { ...next[i], category: e.target.value };
+                      setIngredientRows(next);
+                    }}
+                    className="w-[9.5rem] shrink-0 rounded-xl border border-border bg-surface-2 px-2 py-2.5 text-[13px] text-text outline-none transition-colors focus:border-accent"
+                  >
+                    {INGREDIENT_CATEGORIES.map((cat) => (
+                      <option key={cat} value={cat}>
+                        {cat}
+                      </option>
+                    ))}
+                  </select>
+                  {ingredientRows.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setIngredientRows((prev) =>
+                          prev.filter((_, idx) => idx !== i),
+                        )
+                      }
+                      aria-label="Supprimer l'ingrédient"
+                      className="shrink-0 text-text-muted transition-colors hover:text-danger"
+                    >
+                      ×
+                    </button>
+                  )}
+                </div>
+              ))}
+              <button
+                type="button"
+                onClick={() =>
+                  setIngredientRows((prev) => [
+                    ...prev,
+                    { name: "", category: INGREDIENT_CATEGORIES[0] },
+                  ])
+                }
+                className="self-start text-sm font-semibold text-accent"
+              >
+                + Ajouter un ingrédient
+              </button>
+            </div>
+
             <ErrorText message={error} />
             <button
               type="submit"

@@ -293,7 +293,46 @@ export async function clearCheckedItems(
   return { ok: true };
 }
 
-export type Recipe = { id: string; name: string; ingredients: string[] };
+export type Ingredient = { name: string; category: string };
+
+export const INGREDIENT_CATEGORIES = [
+  "Viande/Poisson",
+  "Légume",
+  "Fruit",
+  "Féculent",
+  "Produit laitier",
+  "Épicerie",
+  "Autre",
+] as const;
+
+export type Recipe = {
+  id: string;
+  name: string;
+  ingredients: Ingredient[];
+  prepTimeMinutes: number | null;
+  cookTimeMinutes: number | null;
+  photoUrl: string | null;
+};
+
+type RecipeRow = {
+  id: string;
+  name: string;
+  ingredients: Ingredient[];
+  prep_time_minutes: number | null;
+  cook_time_minutes: number | null;
+  photo_url: string | null;
+};
+
+function mapRecipeRow(row: RecipeRow): Recipe {
+  return {
+    id: row.id,
+    name: row.name,
+    ingredients: row.ingredients ?? [],
+    prepTimeMinutes: row.prep_time_minutes,
+    cookTimeMinutes: row.cook_time_minutes,
+    photoUrl: row.photo_url,
+  };
+}
 
 export type ListRecipesResult =
   | { ok: true; recipes: Recipe[] }
@@ -310,7 +349,9 @@ export async function listRecipes(
 
   const { data, error } = await supabase
     .from("recipes")
-    .select("id, name, ingredients")
+    .select(
+      "id, name, ingredients, prep_time_minutes, cook_time_minutes, photo_url",
+    )
     .eq("household_id", householdId)
     .order("created_at", { ascending: true });
 
@@ -318,7 +359,13 @@ export async function listRecipes(
     return { ok: false, error: "Impossible de charger les recettes." };
   }
 
-  return { ok: true, recipes: data ?? [] };
+  return { ok: true, recipes: (data ?? []).map(mapRecipeRow) };
+}
+
+function parseOptionalInt(value: FormDataEntryValue | null) {
+  if (!value) return null;
+  const n = parseInt(value as string, 10);
+  return Number.isFinite(n) && n >= 0 ? n : null;
 }
 
 export async function createRecipe(
@@ -326,13 +373,21 @@ export async function createRecipe(
   formData: FormData,
 ): Promise<RecipeActionResult> {
   const name = (formData.get("recipe-name") as string | null)?.trim() ?? "";
-  const rawIngredients =
-    (formData.get("recipe-ingredients") as string | null) ?? "";
+  const ingredientsRaw =
+    (formData.get("recipe-ingredients-json") as string | null) ?? "[]";
+  const prepTimeMinutes = parseOptionalInt(formData.get("recipe-prep-time"));
+  const cookTimeMinutes = parseOptionalInt(formData.get("recipe-cook-time"));
+  const photo = formData.get("recipe-photo") as File | null;
 
-  const ingredients = rawIngredients
-    .split("\n")
-    .map((line) => line.trim())
-    .filter((line) => line.length > 0);
+  let ingredients: Ingredient[] = [];
+  try {
+    ingredients = JSON.parse(ingredientsRaw);
+  } catch {
+    ingredients = [];
+  }
+  ingredients = ingredients
+    .map((i) => ({ name: (i.name ?? "").trim(), category: i.category || "Autre" }))
+    .filter((i) => i.name.length > 0);
 
   if (!name) {
     return { ok: false, error: "Entrez un nom de recette." };
@@ -343,17 +398,41 @@ export async function createRecipe(
 
   const supabase = getSupabaseServerClient();
 
+  let photoUrl: string | null = null;
+  if (photo && photo.size > 0) {
+    const ext = photo.name.split(".").pop() || "jpg";
+    const path = `${householdId}/${crypto.randomUUID()}.${ext}`;
+    const { error: uploadError } = await supabase.storage
+      .from("recipe-photos")
+      .upload(path, photo, { contentType: photo.type });
+    if (!uploadError) {
+      const { data: publicUrlData } = supabase.storage
+        .from("recipe-photos")
+        .getPublicUrl(path);
+      photoUrl = publicUrlData.publicUrl;
+    }
+  }
+
   const { data: inserted, error } = await supabase
     .from("recipes")
-    .insert({ household_id: householdId, name, ingredients })
-    .select("id, name, ingredients")
+    .insert({
+      household_id: householdId,
+      name,
+      ingredients,
+      prep_time_minutes: prepTimeMinutes,
+      cook_time_minutes: cookTimeMinutes,
+      photo_url: photoUrl,
+    })
+    .select(
+      "id, name, ingredients, prep_time_minutes, cook_time_minutes, photo_url",
+    )
     .single();
 
   if (error || !inserted) {
     return { ok: false, error: "Une erreur est survenue, réessayez." };
   }
 
-  return { ok: true, recipe: inserted };
+  return { ok: true, recipe: mapRecipeRow(inserted) };
 }
 
 export async function deleteRecipe(recipeId: string): Promise<SimpleResult> {
@@ -384,9 +463,9 @@ export async function addRecipeToShoppingList(
     return { ok: false, error: "Recette introuvable." };
   }
 
-  const rows = (recipe.ingredients as string[]).map((name) => ({
+  const rows = (recipe.ingredients as Ingredient[]).map((ingredient) => ({
     household_id: householdId,
-    name,
+    name: ingredient.name,
     quantity: null,
     checked: false,
   }));
