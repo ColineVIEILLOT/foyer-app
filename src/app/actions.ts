@@ -473,6 +473,85 @@ export async function createRecipe(
   return { ok: true, recipe: mapRecipeRow(inserted) };
 }
 
+export async function updateRecipe(
+  recipeId: string,
+  householdId: string,
+  formData: FormData,
+): Promise<RecipeActionResult> {
+  const name = (formData.get("recipe-name") as string | null)?.trim() ?? "";
+  const ingredientsRaw =
+    (formData.get("recipe-ingredients-json") as string | null) ?? "[]";
+  const prepTimeMinutes = parseOptionalInt(formData.get("recipe-prep-time"));
+  const cookTimeMinutes = parseOptionalInt(formData.get("recipe-cook-time"));
+  const photo = formData.get("recipe-photo") as File | null;
+  const steps =
+    (formData.get("recipe-steps") as string | null)?.trim() || null;
+  const tags = formData.getAll("recipe-tags") as string[];
+
+  let ingredients: Ingredient[] = [];
+  try {
+    ingredients = JSON.parse(ingredientsRaw);
+  } catch {
+    ingredients = [];
+  }
+  ingredients = ingredients
+    .map((i) => ({ name: (i.name ?? "").trim(), category: i.category || "Autre" }))
+    .filter((i) => i.name.length > 0);
+
+  if (!name) {
+    return { ok: false, error: "Entrez un nom de recette." };
+  }
+  if (ingredients.length === 0) {
+    return { ok: false, error: "Ajoute au moins un ingrédient." };
+  }
+
+  const supabase = getSupabaseServerClient();
+
+  const { data: existing } = await supabase
+    .from("recipes")
+    .select("photo_url")
+    .eq("id", recipeId)
+    .maybeSingle();
+
+  let photoUrl: string | null = existing?.photo_url ?? null;
+  if (photo && photo.size > 0) {
+    const ext = photo.name.split(".").pop() || "jpg";
+    const path = `${householdId}/${crypto.randomUUID()}.${ext}`;
+    const { error: uploadError } = await supabase.storage
+      .from("recipe-photos")
+      .upload(path, photo, { contentType: photo.type });
+    if (!uploadError) {
+      const { data: publicUrlData } = supabase.storage
+        .from("recipe-photos")
+        .getPublicUrl(path);
+      photoUrl = publicUrlData.publicUrl;
+    }
+  }
+
+  const { data: updated, error } = await supabase
+    .from("recipes")
+    .update({
+      name,
+      ingredients,
+      prep_time_minutes: prepTimeMinutes,
+      cook_time_minutes: cookTimeMinutes,
+      photo_url: photoUrl,
+      steps,
+      tags,
+    })
+    .eq("id", recipeId)
+    .select(
+      "id, name, ingredients, prep_time_minutes, cook_time_minutes, photo_url, steps, tags",
+    )
+    .single();
+
+  if (error || !updated) {
+    return { ok: false, error: "Une erreur est survenue, réessayez." };
+  }
+
+  return { ok: true, recipe: mapRecipeRow(updated) };
+}
+
 export async function deleteRecipe(recipeId: string): Promise<SimpleResult> {
   const supabase = getSupabaseServerClient();
 

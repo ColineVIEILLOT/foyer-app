@@ -25,5 +25,4 @@ export const RECIPE_TAGS = [
   "Économique",
   "Végétarien",
   "En famille",
-  "Batch cooking",
 ] as const;

@@ -17,6 +17,7 @@ import {
   createRecipe,
   deleteRecipe,
   addRecipeToShoppingList,
+  updateRecipe,
   listWeeklyMenu,
   setMenuDay,
   addWeeklyMenuToShoppingList,
@@ -325,10 +326,12 @@ function TextField({
   id,
   placeholder,
   autoComplete,
+  defaultValue,
 }: {
   id: string;
   placeholder?: string;
   autoComplete?: string;
+  defaultValue?: string;
 }) {
   return (
     <input
@@ -337,6 +340,7 @@ function TextField({
       type="text"
       placeholder={placeholder}
       autoComplete={autoComplete}
+      defaultValue={defaultValue}
       required
       className="w-full rounded-xl border border-border bg-surface-2 px-4 py-3 text-[16px] text-text placeholder:text-text-muted/60 outline-none transition-colors focus:border-accent"
     />
@@ -393,6 +397,8 @@ export default function Home() {
   >([{ name: "", category: INGREDIENT_CATEGORIES[0] }]);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [customTag, setCustomTag] = useState("");
+  const [editingRecipe, setEditingRecipe] = useState<Recipe | null>(null);
   const [weeklyMenu, setWeeklyMenu] = useState<MenuDay[]>(
     WEEK_DAYS.map((day) => ({ day, recipeId: null, recipeName: null })),
   );
@@ -643,17 +649,55 @@ export default function Home() {
     const formData = new FormData(e.currentTarget);
     formData.set("recipe-ingredients-json", JSON.stringify(cleanIngredients));
     selectedTags.forEach((tag) => formData.append("recipe-tags", tag));
-    const result = await createRecipe(householdId, formData);
+
+    const result = editingRecipe
+      ? await updateRecipe(editingRecipe.id, householdId, formData)
+      : await createRecipe(householdId, formData);
+
     setPending(false);
     if (result.ok) {
-      setRecipes((prev) => [...prev, result.recipe]);
+      if (editingRecipe) {
+        setRecipes((prev) =>
+          prev.map((r) => (r.id === result.recipe.id ? result.recipe : r)),
+        );
+        setSelectedRecipe(result.recipe);
+        setView("recipe-detail");
+      } else {
+        setRecipes((prev) => [...prev, result.recipe]);
+        setView("recipes");
+      }
       setIngredientRows([{ name: "", category: INGREDIENT_CATEGORIES[0] }]);
       setPhotoPreview(null);
       setSelectedTags([]);
-      setView("recipes");
+      setCustomTag("");
+      setEditingRecipe(null);
     } else {
       setError(result.error);
     }
+  }
+
+  function openNewRecipeForm() {
+    setError(null);
+    setEditingRecipe(null);
+    setIngredientRows([{ name: "", category: INGREDIENT_CATEGORIES[0] }]);
+    setSelectedTags([]);
+    setCustomTag("");
+    setPhotoPreview(null);
+    setView("new-recipe");
+  }
+
+  function openEditRecipeForm(recipe: Recipe) {
+    setError(null);
+    setEditingRecipe(recipe);
+    setIngredientRows(
+      recipe.ingredients.length > 0
+        ? recipe.ingredients.map((i) => ({ ...i }))
+        : [{ name: "", category: INGREDIENT_CATEGORIES[0] }],
+    );
+    setSelectedTags(recipe.tags);
+    setCustomTag("");
+    setPhotoPreview(recipe.photoUrl);
+    setView("new-recipe");
   }
 
   function sortedRecipes() {
@@ -1131,15 +1175,7 @@ export default function Home() {
               ← Retour
             </button>
             <button
-              onClick={() => {
-                setError(null);
-                setIngredientRows([
-                  { name: "", category: INGREDIENT_CATEGORIES[0] },
-                ]);
-                setPhotoPreview(null);
-                setSelectedTags([]);
-                setView("new-recipe");
-              }}
+              onClick={openNewRecipeForm}
               className="rounded-xl bg-accent px-4 py-2 text-sm font-semibold text-surface transition-colors hover:bg-accent-soft"
             >
               + Nouvelle recette
@@ -1178,7 +1214,9 @@ export default function Home() {
             </div>
           </div>
 
-          {RECIPE_TAGS.map((tag) => {
+          {Array.from(
+            new Set([...RECIPE_TAGS, ...recipes.flatMap((r) => r.tags)]),
+          ).map((tag) => {
             const tagged = recipes.filter((r) => r.tags.includes(tag));
             if (tagged.length === 0) return null;
             return (
@@ -1412,9 +1450,16 @@ export default function Home() {
 
               <button
                 onClick={() => setMenuPickerOpen((v) => !v)}
-                className="w-full rounded-xl border border-border px-5 py-3 text-[15px] font-semibold text-text transition-colors hover:border-accent"
+                className="mb-2 w-full rounded-xl border border-border px-5 py-3 text-[15px] font-semibold text-text transition-colors hover:border-accent"
               >
                 + Ajouter au menu de la semaine
+              </button>
+
+              <button
+                onClick={() => openEditRecipeForm(selectedRecipe)}
+                className="w-full rounded-xl border border-border px-5 py-3 text-[15px] font-semibold text-text transition-colors hover:border-accent"
+              >
+                Modifier la recette
               </button>
 
               {menuPickerOpen && (
@@ -1452,25 +1497,32 @@ export default function Home() {
               type="button"
               onClick={() => {
                 setError(null);
-                setView("recipes");
+                setEditingRecipe(null);
+                setView(editingRecipe ? "recipe-detail" : "recipes");
               }}
               className="mb-1 self-start text-sm text-text-muted transition-colors hover:text-text"
             >
               ← Retour
             </button>
             <h1 className="font-display text-2xl font-bold text-text">
-              Nouvelle recette
+              {editingRecipe ? "Modifier la recette" : "Nouvelle recette"}
             </h1>
 
             <div className="flex flex-col gap-1.5">
               <FieldLabel htmlFor="recipe-name">Nom de la recette</FieldLabel>
-              <TextField id="recipe-name" placeholder="Pâtes tomate mozzarella" />
+              <TextField
+                id="recipe-name"
+                placeholder="Pâtes tomate mozzarella"
+                defaultValue={editingRecipe?.name}
+              />
             </div>
 
             <div className="flex flex-col gap-1.5">
               <FieldLabel htmlFor="recipe-tags">Type de recette</FieldLabel>
               <div className="flex flex-wrap gap-2">
-                {RECIPE_TAGS.map((tag) => {
+                {Array.from(
+                  new Set([...RECIPE_TAGS, ...selectedTags]),
+                ).map((tag) => {
                   const active = selectedTags.includes(tag);
                   return (
                     <button
@@ -1497,6 +1549,27 @@ export default function Home() {
                   );
                 })}
               </div>
+              <div className="mt-1 flex gap-2">
+                <input
+                  value={customTag}
+                  onChange={(e) => setCustomTag(e.target.value)}
+                  placeholder="Autre catégorie…"
+                  className="min-w-0 flex-1 rounded-xl border border-border bg-surface-2 px-3 py-2 text-[14px] text-text placeholder:text-text-muted/60 outline-none transition-colors focus:border-accent"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    const trimmed = customTag.trim();
+                    if (trimmed && !selectedTags.includes(trimmed)) {
+                      setSelectedTags((prev) => [...prev, trimmed]);
+                    }
+                    setCustomTag("");
+                  }}
+                  className="shrink-0 rounded-xl border border-border px-3 py-2 text-sm font-semibold text-text transition-colors hover:border-accent"
+                >
+                  Ajouter
+                </button>
+              </div>
             </div>
 
             <div className="flex gap-3">
@@ -1509,6 +1582,7 @@ export default function Home() {
                   min={0}
                   inputMode="numeric"
                   placeholder="15"
+                  defaultValue={editingRecipe?.prepTimeMinutes ?? undefined}
                   className="w-full rounded-xl border border-border bg-surface-2 px-4 py-3 text-[16px] text-text placeholder:text-text-muted/60 outline-none transition-colors focus:border-accent"
                 />
               </div>
@@ -1521,6 +1595,7 @@ export default function Home() {
                   min={0}
                   inputMode="numeric"
                   placeholder="20"
+                  defaultValue={editingRecipe?.cookTimeMinutes ?? undefined}
                   className="w-full rounded-xl border border-border bg-surface-2 px-4 py-3 text-[16px] text-text placeholder:text-text-muted/60 outline-none transition-colors focus:border-accent"
                 />
               </div>
@@ -1621,6 +1696,7 @@ export default function Home() {
                 placeholder={
                   "Faire bouillir l'eau et cuire les pâtes.\nCouper les tomates et la mozzarella.\nMélanger le tout avec le basilic."
                 }
+                defaultValue={editingRecipe?.steps ?? undefined}
                 className="w-full rounded-xl border border-border bg-surface-2 px-4 py-3 text-[16px] text-text placeholder:text-text-muted/60 outline-none transition-colors focus:border-accent"
               />
             </div>
@@ -1631,7 +1707,11 @@ export default function Home() {
               disabled={pending}
               className="mt-2 w-full rounded-xl bg-accent px-5 py-3.5 text-[15px] font-semibold text-surface transition-colors hover:bg-accent-soft disabled:opacity-60"
             >
-              {pending ? "Création…" : "Créer la recette"}
+              {pending
+                ? "Enregistrement…"
+                : editingRecipe
+                  ? "Enregistrer les modifications"
+                  : "Créer la recette"}
             </button>
           </form>
         </div>
