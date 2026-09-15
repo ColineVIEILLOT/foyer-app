@@ -534,7 +534,7 @@ export default function Home() {
             />
           </div>
 
-          <div className="mb-6 flex items-center gap-3 overflow-x-auto pb-1">
+          <div className="mb-6 -m-1 flex items-center gap-3 overflow-x-auto p-1">
             {profiles.map((profile, i) => {
               const avatarColor = AVATAR_COLORS[i % AVATAR_COLORS.length];
               const isActive = profile.name === activeProfile;
@@ -576,7 +576,12 @@ export default function Home() {
             </button>
           </div>
 
-          <div className="mb-4 rounded-2xl border border-border bg-surface px-5 py-4">
+          <div
+            className="mb-4 rounded-2xl border border-border px-5 py-4"
+            style={{
+              backgroundColor: "color-mix(in srgb, var(--accent) 7%, var(--surface))",
+            }}
+          >
             {weatherStatus === "loaded" && weather ? (
               <>
                 <div className="flex items-center gap-3">
@@ -622,14 +627,24 @@ export default function Home() {
             )}
           </div>
 
-          <div className="mb-4 rounded-2xl border border-border bg-surface px-5 py-4">
+          <div
+            className="mb-4 rounded-2xl border border-border px-5 py-4"
+            style={{
+              backgroundColor: "color-mix(in srgb, var(--sage) 7%, var(--surface))",
+            }}
+          >
             <p className="mb-1 text-[15px] font-semibold text-text">
               Le savais-tu ?
             </p>
             <p className="text-sm italic text-text-muted">{getDailyFact()}</p>
           </div>
 
-          <div className="mb-6 rounded-2xl border border-border bg-surface px-5 py-4">
+          <div
+            className="mb-6 rounded-2xl border border-border px-5 py-4"
+            style={{
+              backgroundColor: "color-mix(in srgb, var(--calendar) 7%, var(--surface))",
+            }}
+          >
             <p className="mb-1 text-[15px] font-semibold text-text">
               Aujourd&apos;hui
             </p>
@@ -705,7 +720,10 @@ export default function Home() {
               ({ title, subtitle, color, Icon }) => (
                 <div
                   key={title}
-                  className="flex items-center gap-3 rounded-2xl border border-border bg-surface px-5 py-4"
+                  className="flex items-center gap-3 rounded-2xl border border-border px-5 py-4"
+                  style={{
+                    backgroundColor: `color-mix(in srgb, var(--${color}) 7%, var(--surface))`,
+                  }}
                 >
                   <span
                     className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full"
