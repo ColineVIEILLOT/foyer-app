@@ -230,6 +230,26 @@ function IconCalendar() {
   );
 }
 
+function IconHome() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5" aria-hidden>
+      <path
+        d="M4 11.5 12 4l8 7.5"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M6 10v9a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1v-9"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 const DASHBOARD_CARDS = [
   { title: "Courses", subtitle: "Bientôt disponible", color: "pink", Icon: IconBasket },
   { title: "Budget", subtitle: "Bientôt disponible", color: "accent", Icon: IconWallet },
@@ -237,6 +257,13 @@ const DASHBOARD_CARDS = [
 ] as const;
 
 const AVATAR_COLORS = ["pink", "calendar", "accent", "sage"] as const;
+
+const BOTTOM_NAV = [
+  { key: "home", label: "Accueil", color: "accent", Icon: IconHome },
+  { key: "courses", label: "Courses", color: "pink", Icon: IconBasket },
+  { key: "budget", label: "Budget", color: "accent", Icon: IconWallet },
+  { key: "calendrier", label: "Calendrier", color: "calendar", Icon: IconCalendar },
+] as const;
 
 function LogoMark() {
   return (
@@ -508,14 +535,19 @@ export default function Home() {
     setView("choice");
   }
 
+  const showBottomNav = view === "home" || view === "courses";
+
   return (
-    <main
-      className="flex min-h-screen flex-1 items-center justify-center px-6"
-      style={{
-        paddingTop: "max(env(safe-area-inset-top), 2rem)",
-        paddingBottom: "max(env(safe-area-inset-bottom), 2rem)",
-      }}
-    >
+    <>
+      <main
+        className="flex min-h-screen flex-1 items-center justify-center px-6"
+        style={{
+          paddingTop: "max(env(safe-area-inset-top), 2rem)",
+          paddingBottom: showBottomNav
+            ? "calc(88px + env(safe-area-inset-bottom))"
+            : "max(env(safe-area-inset-bottom), 2rem)",
+        }}
+      >
       {view === "home" ? (
         <div className="w-full max-w-[380px]">
           <div className="mb-6 flex items-center justify-between">
@@ -577,12 +609,7 @@ export default function Home() {
           </div>
 
           <div className="mb-4 grid grid-cols-2 gap-3">
-            <div
-              className="rounded-2xl border border-border px-4 py-4"
-              style={{
-                backgroundColor: "color-mix(in srgb, var(--accent) 7%, var(--surface))",
-              }}
-            >
+            <div className="rounded-2xl border border-border bg-surface px-4 py-4">
               {weatherStatus === "loaded" && weather ? (
                 <>
                   <span className="text-2xl">{weather.icon}</span>
@@ -614,12 +641,7 @@ export default function Home() {
               )}
             </div>
 
-            <div
-              className="rounded-2xl border border-border px-4 py-4"
-              style={{
-                backgroundColor: "color-mix(in srgb, var(--sage) 7%, var(--surface))",
-              }}
-            >
+            <div className="rounded-2xl border border-border bg-surface px-4 py-4">
               <p className="text-[15px] font-semibold text-text">
                 Le savais-tu ?
               </p>
@@ -629,12 +651,7 @@ export default function Home() {
             </div>
           </div>
 
-          <div
-            className="mb-4 rounded-2xl border border-border px-5 py-4"
-            style={{
-              backgroundColor: "color-mix(in srgb, var(--calendar) 7%, var(--surface))",
-            }}
-          >
+          <div className="mb-4 rounded-2xl border border-border bg-surface px-5 py-4">
             <p className="mb-1 text-[15px] font-semibold text-text">
               Aujourd&apos;hui
             </p>
@@ -647,10 +664,7 @@ export default function Home() {
           <div className="flex flex-col gap-3">
             <button
               onClick={() => setView("courses")}
-              className="rounded-2xl border border-border px-5 py-4 text-left transition-colors hover:border-accent"
-              style={{
-                backgroundColor: "color-mix(in srgb, var(--pink) 7%, var(--surface))",
-              }}
+              className="rounded-2xl border border-border bg-surface px-5 py-4 text-left transition-colors hover:border-accent"
             >
               <div className="mb-3 flex items-center gap-3">
                 <span
@@ -710,10 +724,7 @@ export default function Home() {
               ({ title, subtitle, color, Icon }) => (
                 <div
                   key={title}
-                  className="flex items-center gap-3 rounded-2xl border border-border px-5 py-4"
-                  style={{
-                    backgroundColor: `color-mix(in srgb, var(--${color}) 7%, var(--surface))`,
-                  }}
+                  className="flex items-center gap-3 rounded-2xl border border-border bg-surface px-5 py-4"
                 >
                   <span
                     className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full"
@@ -1055,6 +1066,49 @@ export default function Home() {
           </div>
         </div>
       )}
-    </main>
+      </main>
+
+      {showBottomNav && (
+        <nav
+          className="fixed inset-x-0 bottom-0 z-10 border-t border-border bg-surface"
+          style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+        >
+          <div className="mx-auto flex max-w-[380px] items-center justify-around px-2 py-2">
+            {BOTTOM_NAV.map(({ key, label, color, Icon }) => {
+              const isActive =
+                view === key || (key === "home" && view === "home");
+              const isEnabled = key === "home" || key === "courses";
+              return (
+                <button
+                  key={key}
+                  disabled={!isEnabled}
+                  onClick={() => {
+                    if (key === "home") setView("home");
+                    if (key === "courses") setView("courses");
+                  }}
+                  className="flex flex-col items-center gap-1 px-3 py-1 disabled:opacity-40"
+                >
+                  <span
+                    style={{
+                      color: isActive ? `var(--${color})` : "var(--text-muted)",
+                    }}
+                  >
+                    <Icon />
+                  </span>
+                  <span
+                    className="text-[11px] font-medium"
+                    style={{
+                      color: isActive ? `var(--${color})` : "var(--text-muted)",
+                    }}
+                  >
+                    {label}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </nav>
+      )}
+    </>
   );
 }
