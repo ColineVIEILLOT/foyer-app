@@ -73,18 +73,25 @@ export async function createHousehold(
 }
 
 export async function listHouseholds(): Promise<ListHouseholdsResult> {
-  const supabase = getSupabaseServerClient();
+  try {
+    const supabase = getSupabaseServerClient();
 
-  const { data, error } = await supabase
-    .from("households")
-    .select("id, name")
-    .order("name", { ascending: true });
+    const { data, error } = await supabase
+      .from("households")
+      .select("id, name")
+      .order("name", { ascending: true });
 
-  if (error) {
-    return { ok: false, error: "Impossible de charger les foyers." };
+    if (error) {
+      return { ok: false, error: `Supabase: ${error.message}` };
+    }
+
+    return { ok: true, households: data ?? [] };
+  } catch (e) {
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "Erreur inconnue.",
+    };
   }
-
-  return { ok: true, households: data ?? [] };
 }
 
 export async function joinHousehold(
