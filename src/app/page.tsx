@@ -576,25 +576,21 @@ export default function Home() {
             </button>
           </div>
 
-          <div
-            className="mb-4 rounded-2xl border border-border px-5 py-4"
-            style={{
-              backgroundColor: "color-mix(in srgb, var(--accent) 7%, var(--surface))",
-            }}
-          >
-            {weatherStatus === "loaded" && weather ? (
-              <>
-                <div className="flex items-center gap-3">
-                  <span className="text-3xl">{weather.icon}</span>
-                  <div>
-                    <p className="text-[15px] font-semibold text-text">
-                      {weather.temperature}°C
-                    </p>
-                    <p className="text-sm text-text-muted">{weather.label}</p>
-                  </div>
-                </div>
-                <div className="mt-4">
-                  <div className="relative h-1.5 rounded-full bg-surface-2">
+          <div className="mb-4 grid grid-cols-2 gap-3">
+            <div
+              className="rounded-2xl border border-border px-4 py-4"
+              style={{
+                backgroundColor: "color-mix(in srgb, var(--accent) 7%, var(--surface))",
+              }}
+            >
+              {weatherStatus === "loaded" && weather ? (
+                <>
+                  <span className="text-2xl">{weather.icon}</span>
+                  <p className="mt-1 text-[15px] font-semibold text-text">
+                    {weather.temperature}°C
+                  </p>
+                  <p className="text-xs text-text-muted">{weather.label}</p>
+                  <div className="relative mt-3 h-1.5 rounded-full bg-surface-2">
                     <div
                       className="absolute inset-y-0 left-0 rounded-full"
                       style={{
@@ -603,44 +599,38 @@ export default function Home() {
                           "linear-gradient(90deg, var(--pink), var(--accent))",
                       }}
                     />
-                    <span
-                      className="absolute top-1/2 flex h-4 w-4 -translate-y-1/2 -translate-x-1/2 items-center justify-center rounded-full bg-accent text-[10px]"
-                      style={{
-                        left: `${getDayProgress(weather.sunrise, weather.sunset) * 100}%`,
-                      }}
-                    >
-                      ☀️
-                    </span>
                   </div>
-                  <div className="mt-2 flex justify-between text-xs text-text-muted">
+                  <div className="mt-1.5 flex justify-between text-[10px] text-text-muted">
                     <span>{formatTime(weather.sunrise)}</span>
                     <span>{formatTime(weather.sunset)}</span>
                   </div>
-                </div>
-              </>
-            ) : (
-              <p className="text-sm text-text-muted">
-                {weatherStatus === "error"
-                  ? "Météo indisponible pour le moment."
-                  : "Chargement de la météo…"}
+                </>
+              ) : (
+                <p className="text-sm text-text-muted">
+                  {weatherStatus === "error"
+                    ? "Météo indisponible."
+                    : "Chargement…"}
+                </p>
+              )}
+            </div>
+
+            <div
+              className="rounded-2xl border border-border px-4 py-4"
+              style={{
+                backgroundColor: "color-mix(in srgb, var(--sage) 7%, var(--surface))",
+              }}
+            >
+              <p className="text-[15px] font-semibold text-text">
+                Le savais-tu ?
               </p>
-            )}
+              <p className="mt-1 line-clamp-5 text-xs italic text-text-muted">
+                {getDailyFact()}
+              </p>
+            </div>
           </div>
 
           <div
             className="mb-4 rounded-2xl border border-border px-5 py-4"
-            style={{
-              backgroundColor: "color-mix(in srgb, var(--sage) 7%, var(--surface))",
-            }}
-          >
-            <p className="mb-1 text-[15px] font-semibold text-text">
-              Le savais-tu ?
-            </p>
-            <p className="text-sm italic text-text-muted">{getDailyFact()}</p>
-          </div>
-
-          <div
-            className="mb-6 rounded-2xl border border-border px-5 py-4"
             style={{
               backgroundColor: "color-mix(in srgb, var(--calendar) 7%, var(--surface))",
             }}
@@ -743,6 +733,29 @@ export default function Home() {
                 </div>
               ),
             )}
+          </div>
+
+          <div className="mt-6 rounded-2xl border border-border bg-surface px-5 py-4">
+            <p className="mb-3 text-[15px] font-semibold text-text">
+              Notre foyer en un coup d&apos;œil
+            </p>
+            <div className="flex items-center justify-around text-center">
+              <div>
+                <p className="font-display text-xl font-bold text-text">
+                  {profiles.length}
+                </p>
+                <p className="text-xs text-text-muted">
+                  membre{profiles.length > 1 ? "s" : ""}
+                </p>
+              </div>
+              <div className="h-8 w-px bg-border" />
+              <div>
+                <p className="font-display text-xl font-bold text-text">
+                  {shoppingItems.filter((i) => !i.checked).length}
+                </p>
+                <p className="text-xs text-text-muted">à acheter</p>
+              </div>
+            </div>
           </div>
         </div>
       ) : view === "courses" ? (
